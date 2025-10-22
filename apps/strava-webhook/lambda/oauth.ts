@@ -128,7 +128,30 @@ async function handleCallback(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
 
   // Validate state parameter (CSRF protection)
-  const isValidState = await validateAndConsumeOAuthState(state || '');
+  let isValidState: boolean;
+  try {
+    isValidState = await validateAndConsumeOAuthState(state || '');
+  } catch (error) {
+    // DynamoDB service error (throttling, outage, etc.)
+    console.error('Service error during OAuth state validation:', error);
+
+    return {
+      statusCode: 500,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      body: `
+        <!DOCTYPE html>
+        <html>
+          <head><meta charset="utf-8"></head>
+          <body>
+            <h1>Service Temporarily Unavailable</h1>
+            <p>We're experiencing technical difficulties. Please try again in a moment.</p>
+            <a href="../">Go back</a>
+          </body>
+        </html>
+      `,
+    };
+  }
+
   if (!isValidState) {
     console.error('Invalid or missing OAuth state parameter');
 

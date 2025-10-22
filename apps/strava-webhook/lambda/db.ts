@@ -134,48 +134,46 @@ export async function createOAuthState(): Promise<string> {
 /**
  * Validate and consume an OAuth state token
  * Returns true if valid, false if invalid or expired
- * State is deleted after validation (single-use)
+ * State is deleted atomically to prevent race conditions (single-use)
  */
 export async function validateAndConsumeOAuthState(state: string): Promise<boolean> {
   if (!state) {
     return false;
   }
 
+  const now = Math.floor(Date.now() / 1000);
+
   try {
-    // Get the state record
-    const result = await docClient.send(
-      new GetCommand({
-        TableName: STATE_TABLE_NAME,
-        Key: { state },
-      })
-    );
-
-    const stateRecord = result.Item as OAuthState | undefined;
-
-    // Check if state exists
-    if (!stateRecord) {
-      console.warn('OAuth state not found:', state.substring(0, 8) + '...');
-      return false;
-    }
-
-    // Check if expired (TTL is checked by DynamoDB but we double-check)
-    const now = Math.floor(Date.now() / 1000);
-    if (stateRecord.ttl < now) {
-      console.warn('OAuth state expired:', state.substring(0, 8) + '...');
-      return false;
-    }
-
-    // Delete the state (single-use token)
+    // Atomic delete with condition: state must exist and not be expired
+    // This prevents race conditions where two parallel requests could both validate
     await docClient.send(
       new DeleteCommand({
         TableName: STATE_TABLE_NAME,
         Key: { state },
+        ConditionExpression: 'attribute_exists(#state) AND #ttl > :now',
+        ExpressionAttributeNames: {
+          '#state': 'state',
+          '#ttl': 'ttl',
+        },
+        ExpressionAttributeValues: {
+          ':now': now,
+        },
       })
     );
 
+    // If we get here, the delete succeeded - state was valid
+    console.log('OAuth state validated and consumed:', state.substring(0, 8) + '...');
     return true;
-  } catch (error) {
-    console.error('Error validating OAuth state:', error);
-    return false;
+  } catch (error: any) {
+    // ConditionalCheckFailedException means state was invalid (missing or expired)
+    if (error.name === 'ConditionalCheckFailedException') {
+      console.warn('OAuth state validation failed (not found or expired):', state.substring(0, 8) + '...');
+      return false;
+    }
+
+    // Other errors (throttling, service issues) - log and return false
+    // This prevents exposing internal errors to users via the OAuth flow
+    console.error('DynamoDB error during OAuth state validation:', error);
+    throw error; // Re-throw to allow caller to handle service errors differently
   }
 }

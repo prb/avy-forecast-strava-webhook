@@ -242,6 +242,35 @@ describe('OAuth Handler', () => {
       expect(result.statusCode).toBe(400);
       expect(result.body).toContain('Missing authorization code');
     });
+
+    it('should return 500 when DynamoDB has service error during state validation', async () => {
+      // Simulate DynamoDB throttling or service outage
+      vi.mocked(db.validateAndConsumeOAuthState).mockRejectedValue(
+        new Error('ServiceUnavailable: DynamoDB is temporarily unavailable')
+      );
+
+      const event: APIGatewayProxyEvent = {
+        httpMethod: 'GET',
+        path: '/callback',
+        queryStringParameters: {
+          code: 'test_code',
+          state: 'test_state',
+        },
+      } as any;
+
+      const result = await handler(event);
+
+      // Should attempt to validate state
+      expect(db.validateAndConsumeOAuthState).toHaveBeenCalledWith('test_state');
+
+      // Should NOT exchange code
+      expect(strava.exchangeCodeForToken).not.toHaveBeenCalled();
+
+      // Should return 500 (not 403)
+      expect(result.statusCode).toBe(500);
+      expect(result.body).toContain('Service Temporarily Unavailable');
+      expect(result.body).toContain('technical difficulties');
+    });
   });
 
   describe('Unknown paths', () => {
