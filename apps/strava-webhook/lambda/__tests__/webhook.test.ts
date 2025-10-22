@@ -559,6 +559,85 @@ describe('Webhook Handler', () => {
       expect(forecastApi.getForecastForCoordinate).toHaveBeenCalled();
       expect(strava.updateActivity).toHaveBeenCalled();
     });
+
+    it('should refresh existing forecast when #avy_forecast command is used', async () => {
+      const event: APIGatewayProxyEvent = {
+        httpMethod: 'POST',
+        body: JSON.stringify(mockUpdateWebhookEvent),
+      } as any;
+
+      // Mock activity with existing forecast and #avy_forecast command
+      const activityWithOldForecast = {
+        ...mockBackcountryActivity,
+        name: 'Mt Hood Tour #avy_forecast',
+        description: 'Great powder day!\n\nNWAC Mt Hood Zone forecast: 2🟨/2🟨/1🟩 (https://nwac.us/avalanche-forecast/#/forecast/10/166377)',
+      };
+      vi.mocked(strava.getActivity).mockResolvedValue(activityWithOldForecast);
+
+      // Mock new forecast (different from existing)
+      const mockForecastProductResponse: ForecastProductResponse = {
+        zone: {
+          id: 3476,
+          zone_id: '10',
+          name: 'Mt Hood',
+        },
+        product: mockMtHoodForecast, // This has 3/3/2 ratings
+      };
+      vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue(mockForecastProductResponse as any);
+
+      const result = await handler(event);
+
+      expect(result.statusCode).toBe(200);
+
+      // Should fetch new forecast even though old one exists
+      expect(forecastApi.getForecastForCoordinate).toHaveBeenCalled();
+
+      // Should update with new forecast (old one removed, new one added)
+      expect(strava.updateActivity).toHaveBeenCalledWith(
+        mockUpdateWebhookEvent.object_id,
+        mockUpdateWebhookEvent.owner_id,
+        expect.objectContaining({
+          name: 'Mt Hood Tour', // Command removed
+          description: expect.stringContaining(expectedMtHoodForecastText), // New forecast
+        })
+      );
+
+      // Should NOT contain old forecast
+      const updateCall = vi.mocked(strava.updateActivity).mock.calls[0][2];
+      expect(updateCall.description).not.toContain('166377'); // Old forecast ID
+      expect(updateCall.description).toContain('166378'); // New forecast ID
+    });
+
+    it('should remove #avy_forecast and add message for no-location activity', async () => {
+      const event: APIGatewayProxyEvent = {
+        httpMethod: 'POST',
+        body: JSON.stringify(mockUpdateWebhookEvent),
+      } as any;
+
+      // Mock activity with #avy_forecast but no location
+      const activityNoLocationWithCommand = {
+        ...mockActivityNoLocation,
+        name: 'Indoor Ski Training #avy_forecast',
+      };
+      vi.mocked(strava.getActivity).mockResolvedValue(activityNoLocationWithCommand);
+
+      const result = await handler(event);
+
+      expect(result.statusCode).toBe(200);
+
+      // Should NOT look up forecast (no location)
+      expect(forecastApi.getForecastForCoordinate).not.toHaveBeenCalled();
+
+      // Should remove command from title and add helpful message
+      expect(strava.updateActivity).toHaveBeenCalledWith(
+        mockUpdateWebhookEvent.object_id,
+        mockUpdateWebhookEvent.owner_id,
+        {
+          name: 'Indoor Ski Training', // Command removed
+          description: expect.stringContaining('[No avalanche forecast available: Activity has no location data]'),
+        }
+      );
+    });
   });
 
   describe('Error handling', () => {
