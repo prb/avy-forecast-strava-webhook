@@ -303,9 +303,10 @@ AWS_REGION=us-west-2
    - Consider validating webhook signature if Strava provides one
 
 2. **OAuth Token Storage**
-   - Store tokens in DynamoDB with encryption at rest
+   - Store tokens in DynamoDB table `strava-avy-users` with encryption at rest
    - Never log tokens (sanitize logging output)
    - Use IAM roles for Lambda access to DynamoDB
+   - Per-user storage: `athlete_id`, `access_token`, `refresh_token`, `expires_at`, `username`
 
 3. **API Rate Limiting**
    - Strava API has rate limits (600 requests/15 min, 30,000/day)
