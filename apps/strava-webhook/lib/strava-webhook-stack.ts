@@ -25,10 +25,26 @@ export class StravaWebhookStack extends cdk.Stack {
     });
 
     // ============================================
+    // DynamoDB Table for OAuth State Tokens (CSRF protection)
+    // ============================================
+    const oauthStateTable = new dynamodb.Table(this, 'OAuthStateTable', {
+      partitionKey: {
+        name: 'state',
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST, // On-demand pricing
+      encryption: dynamodb.TableEncryption.AWS_MANAGED, // Encrypt at rest
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // Safe to delete - states are ephemeral
+      timeToLiveAttribute: 'ttl', // Automatically delete expired states
+      tableName: 'strava-avy-oauth-states',
+    });
+
+    // ============================================
     // Environment Variables for All Lambdas
     // ============================================
     const commonEnvironment = {
       TABLE_NAME: usersTable.tableName,
+      STATE_TABLE_NAME: oauthStateTable.tableName,
       STRAVA_CLIENT_ID: process.env.STRAVA_CLIENT_ID || '',
       STRAVA_CLIENT_SECRET: process.env.STRAVA_CLIENT_SECRET || '',
       STRAVA_VERIFY_TOKEN: process.env.STRAVA_VERIFY_TOKEN || '',
@@ -68,6 +84,7 @@ export class StravaWebhookStack extends cdk.Stack {
 
     // Grant DynamoDB permissions
     usersTable.grantReadWriteData(oauthFunction);
+    oauthStateTable.grantReadWriteData(oauthFunction);
 
     // ============================================
     // Lambda Function: Web UI

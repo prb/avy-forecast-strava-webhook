@@ -254,6 +254,8 @@ npm run watch
 - ✅ #avy_forecast command processing
 - ✅ Title cleanup (command removal)
 - ✅ Non-BackcountrySki activities with command
+- ✅ OAuth state generation and validation
+- ✅ OAuth CSRF protection (invalid/missing state rejection)
 
 ### CDK Commands
 
@@ -343,12 +345,28 @@ For 10 users with ~50 activities/month each:
 
 ## Security
 
-- ✅ DynamoDB encryption at rest (AWS-managed)
-- ✅ HTTPS-only API Gateway
-- ✅ IAM roles for Lambda (principle of least privilege)
-- ✅ Webhook verification token
-- ✅ OAuth token expiration (6 hours)
-- ✅ Point-in-time recovery for DynamoDB
+- ✅ **OAuth CSRF Protection**: State parameter validation prevents session fixation attacks
+- ✅ **DynamoDB encryption at rest** (AWS-managed)
+- ✅ **HTTPS-only API Gateway**
+- ✅ **IAM roles for Lambda** (principle of least privilege)
+- ✅ **Webhook verification token**
+- ✅ **OAuth token expiration** (6 hours)
+- ✅ **Point-in-time recovery for DynamoDB**
+
+### OAuth Security Details
+
+The OAuth flow implements CSRF protection using cryptographically secure state tokens:
+
+1. **State Generation**: When users visit `/connect`, a 64-character random hex token is generated using `crypto.randomBytes(32)`
+2. **State Storage**: Tokens are stored in a separate DynamoDB table with 5-minute TTL
+3. **State Validation**: On `/callback`, the state parameter is validated before exchanging the authorization code
+4. **Single-Use Tokens**: State tokens are deleted immediately after validation, preventing replay attacks
+5. **Auto-Cleanup**: DynamoDB TTL automatically removes expired state tokens (older than 5 minutes)
+
+This prevents:
+- **CSRF attacks**: Attackers can't trick users into authorizing the wrong request
+- **Session fixation**: State tokens ensure the callback matches the original authorization request
+- **Replay attacks**: Each state token can only be used once
 
 ## Future Enhancements
 

@@ -2,14 +2,17 @@
  * DynamoDB utility functions for user token management
  */
 
+import { randomBytes } from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
-import type { StravaUser } from './types.js';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import type { StravaUser, OAuthState } from './types.js';
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
 
 const TABLE_NAME = process.env.TABLE_NAME || 'strava-avy-users';
+const STATE_TABLE_NAME = process.env.STATE_TABLE_NAME || 'strava-avy-oauth-states';
+const STATE_TTL_SECONDS = 300; // 5 minutes
 
 /**
  * Get user by athlete ID
@@ -97,4 +100,80 @@ export async function updateUserTokens(
   user.updated_at = new Date().toISOString();
 
   await saveUser(user);
+}
+
+/**
+ * Generate and save a cryptographically secure OAuth state token
+ * Returns the state token for use in OAuth flow
+ */
+export async function createOAuthState(): Promise<string> {
+  const state = randomBytes(32).toString('hex');
+  const now = Math.floor(Date.now() / 1000);
+
+  const stateRecord: OAuthState = {
+    state,
+    ttl: now + STATE_TTL_SECONDS,
+    created_at: new Date().toISOString(),
+  };
+
+  try {
+    await docClient.send(
+      new PutCommand({
+        TableName: STATE_TABLE_NAME,
+        Item: stateRecord,
+      })
+    );
+
+    return state;
+  } catch (error) {
+    console.error('Error saving OAuth state to DynamoDB:', error);
+    throw error;
+  }
+}
+
+/**
+ * Validate and consume an OAuth state token
+ * Returns true if valid, false if invalid or expired
+ * State is deleted atomically to prevent race conditions (single-use)
+ */
+export async function validateAndConsumeOAuthState(state: string): Promise<boolean> {
+  if (!state) {
+    return false;
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+
+  try {
+    // Atomic delete with condition: state must exist and not be expired
+    // This prevents race conditions where two parallel requests could both validate
+    await docClient.send(
+      new DeleteCommand({
+        TableName: STATE_TABLE_NAME,
+        Key: { state },
+        ConditionExpression: 'attribute_exists(#state) AND #ttl > :now',
+        ExpressionAttributeNames: {
+          '#state': 'state',
+          '#ttl': 'ttl',
+        },
+        ExpressionAttributeValues: {
+          ':now': now,
+        },
+      })
+    );
+
+    // If we get here, the delete succeeded - state was valid
+    console.log('OAuth state validated and consumed:', state.substring(0, 8) + '...');
+    return true;
+  } catch (error: any) {
+    // ConditionalCheckFailedException means state was invalid (missing or expired)
+    if (error.name === 'ConditionalCheckFailedException') {
+      console.warn('OAuth state validation failed (not found or expired):', state.substring(0, 8) + '...');
+      return false;
+    }
+
+    // Other errors (throttling, service issues) - log and return false
+    // This prevents exposing internal errors to users via the OAuth flow
+    console.error('DynamoDB error during OAuth state validation:', error);
+    throw error; // Re-throw to allow caller to handle service errors differently
+  }
 }
