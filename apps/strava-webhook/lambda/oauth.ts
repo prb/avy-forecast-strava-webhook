@@ -6,7 +6,7 @@
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { exchangeCodeForToken } from './strava.js';
-import { createUserRecord, saveUser } from './db.js';
+import { createUserRecord, saveUser, createOAuthState, validateAndConsumeOAuthState } from './db.js';
 
 const STRAVA_CLIENT_ID = process.env.STRAVA_CLIENT_ID!;
 
@@ -33,7 +33,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Handle /connect - Start OAuth flow
     if (path.includes('/connect')) {
-      return handleConnect(event);
+      return await handleConnect(event);
     }
 
     // Handle /callback - OAuth callback from Strava
@@ -70,9 +70,12 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 /**
  * Handle /connect - Redirect user to Strava OAuth page
  */
-function handleConnect(event: APIGatewayProxyEvent): APIGatewayProxyResult {
+async function handleConnect(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const scope = 'read,activity:read_all,activity:write';
   const redirectUri = getRedirectUri(event);
+
+  // Generate and store CSRF protection state token
+  const state = await createOAuthState();
 
   const authUrl = new URL('https://www.strava.com/oauth/authorize');
   authUrl.searchParams.set('client_id', STRAVA_CLIENT_ID);
@@ -80,8 +83,9 @@ function handleConnect(event: APIGatewayProxyEvent): APIGatewayProxyResult {
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('scope', scope);
   authUrl.searchParams.set('approval_prompt', 'auto');
+  authUrl.searchParams.set('state', state);
 
-  console.log('Redirecting to Strava OAuth:', authUrl.toString());
+  console.log('Redirecting to Strava OAuth with state token');
   console.log('Redirect URI:', redirectUri);
 
   return {
@@ -99,6 +103,7 @@ function handleConnect(event: APIGatewayProxyEvent): APIGatewayProxyResult {
 async function handleCallback(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
   const params = event.queryStringParameters || {};
   const code = params.code;
+  const state = params.state;
   const error = params.error;
 
   // Check for OAuth error
@@ -116,6 +121,34 @@ async function handleCallback(event: APIGatewayProxyEvent): Promise<APIGatewayPr
             <h1>Authorization Failed</h1>
             <p>You denied access to your Strava account.</p>
             <a href="../">Go back</a>
+          </body>
+        </html>
+      `,
+    };
+  }
+
+  // Validate state parameter (CSRF protection)
+  const isValidState = await validateAndConsumeOAuthState(state || '');
+  if (!isValidState) {
+    console.error('Invalid or missing OAuth state parameter');
+
+    return {
+      statusCode: 403,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      body: `
+        <!DOCTYPE html>
+        <html>
+          <head><meta charset="utf-8"></head>
+          <body>
+            <h1>Security Error</h1>
+            <p>Invalid or expired authorization request.</p>
+            <p>This could be due to:</p>
+            <ul>
+              <li>The authorization link expired (older than 5 minutes)</li>
+              <li>The authorization link was already used</li>
+              <li>A potential security issue was detected</li>
+            </ul>
+            <a href="../">Start over</a>
           </body>
         </html>
       `,

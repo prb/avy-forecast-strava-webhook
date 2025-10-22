@@ -109,6 +109,19 @@ export interface StravaUser {
 }
 
 // ============================================
+// OAuth State Record (for CSRF protection)
+// ============================================
+
+export interface OAuthState {
+  /** State token (partition key) */
+  state: string;
+  /** TTL timestamp (unix seconds) - DynamoDB auto-deletes expired records */
+  ttl: number;
+  /** Creation time (ISO 8601) */
+  created_at: string;
+}
+
+// ============================================
 // Lambda Event/Response Types
 // ============================================
 
