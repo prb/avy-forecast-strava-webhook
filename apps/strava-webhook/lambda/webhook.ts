@@ -222,10 +222,17 @@ async function processActivity(
 
   // If refreshing (manual command + existing forecast), remove old forecast first
   if (hasForecast && hasCommand) {
-    // Remove existing forecast line (NWAC ... forecast: ... URL)
-    newDescription = currentDescription.replace(/\n\nNWAC [^\n]*\(https:\/\/nwac\.us\/avalanche-forecast[^\)]*\)/g, '').trim();
+    // Remove any line containing the NWAC forecast URL pattern
+    // This is more robust than matching specific format like "NWAC ... (URL)"
+    newDescription = currentDescription
+      .replace(/\n\n[^\n]*https:\/\/nwac\.us\/avalanche-forecast\/#\/forecast\/[^\n]*/g, '')
+      .trim();
     console.log('Removed old forecast from description');
   }
+
+  // Normalize description whitespace before adding new content
+  // Remove trailing whitespace to ensure consistent spacing
+  newDescription = newDescription.replace(/\s+$/, '');
 
   if (forecastResult.product) {
     console.log(`Found forecast for zone: ${forecastResult.zone.name}`);
@@ -239,7 +246,7 @@ async function processActivity(
     // If using #avy_forecast command, add a message explaining why no forecast was added
     if (hasCommand) {
       const reason = forecastResult.error || 'No forecast available for this location/date';
-      newDescription = currentDescription + `\n\n[No avalanche forecast available: ${reason}]`;
+      newDescription = newDescription + `\n\n[No avalanche forecast available: ${reason}]`;
     } else {
       // For auto-processing (create events), just skip silently
       return;
