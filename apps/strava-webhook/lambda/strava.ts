@@ -9,6 +9,48 @@ const STRAVA_CLIENT_ID = process.env.STRAVA_CLIENT_ID!;
 const STRAVA_CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET!;
 
 /**
+ * Sanitize sensitive data for logging
+ * Truncates long strings and removes sensitive fields from activity data
+ */
+export function sanitizeForLogging(data: any): any {
+  if (typeof data === 'string') {
+    // Truncate long strings to 50 chars
+    return data.length > 50 ? data.substring(0, 50) + '...' : data;
+  }
+
+  if (Array.isArray(data)) {
+    return data.map(sanitizeForLogging);
+  }
+
+  if (data && typeof data === 'object') {
+    const sanitized: any = {};
+
+    // List of fields to keep from activity objects
+    const allowedFields = ['id', 'athlete', 'name', 'type', 'sport_type', 'start_date', 'moving_time', 'elapsed_time'];
+
+    for (const [key, value] of Object.entries(data)) {
+      // Skip sensitive fields
+      if (key === 'access_token' || key === 'refresh_token') {
+        sanitized[key] = '[REDACTED]';
+        continue;
+      }
+
+      // For activity-like objects, only include safe fields
+      if ('id' in data && 'athlete' in data && !allowedFields.includes(key)) {
+        continue;
+      }
+
+      // Recursively sanitize nested objects
+      sanitized[key] = sanitizeForLogging(value);
+    }
+
+    return sanitized;
+  }
+
+  return data;
+}
+
+/**
  * Check if access token is expired or will expire soon (within 1 hour)
  */
 export function isTokenExpired(expiresAt: number): boolean {
@@ -107,11 +149,7 @@ export async function updateActivityDescription(
 ): Promise<void> {
   const accessToken = await getValidAccessToken(athleteId);
 
-  console.log(`Updating activity ${activityId} with description (${description.length} chars)`);
-  console.log(`Using access token: ${accessToken.substring(0, 20)}...`);
-
-  const requestBody = JSON.stringify({ description });
-  console.log(`Request body: ${requestBody.substring(0, 200)}...`);
+  console.log(`Updating activity ${activityId} for athlete ${athleteId} with description (${description.length} chars)`);
 
   const response = await fetch(`https://www.strava.com/api/v3/activities/${activityId}`, {
     method: 'PUT',
@@ -119,7 +157,7 @@ export async function updateActivityDescription(
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: requestBody,
+    body: JSON.stringify({ description }),
   });
 
   console.log(`Strava API response status: ${response.status} ${response.statusText}`);
@@ -131,8 +169,7 @@ export async function updateActivityDescription(
   }
 
   const responseData = (await response.json()) as StravaActivity;
-  console.log(`Strava API response data:`, JSON.stringify(responseData, null, 2));
-  console.log(`Updated activity description: ${responseData.description?.substring(0, 100)}...`);
+  console.log(`Updated activity ${responseData.id} (type: ${responseData.type || responseData.sport_type})`);
 }
 
 /**
@@ -145,7 +182,8 @@ export async function updateActivity(
 ): Promise<void> {
   const accessToken = await getValidAccessToken(athleteId);
 
-  console.log(`Updating activity ${activityId}:`, updates);
+  const fieldsUpdated = Object.keys(updates).join(', ');
+  console.log(`Updating activity ${activityId} for athlete ${athleteId} - fields: ${fieldsUpdated}`);
 
   const response = await fetch(`https://www.strava.com/api/v3/activities/${activityId}`, {
     method: 'PUT',
@@ -165,7 +203,7 @@ export async function updateActivity(
   }
 
   const responseData = (await response.json()) as StravaActivity;
-  console.log(`Updated activity - name: "${responseData.name}", description: ${responseData.description?.substring(0, 100)}...`);
+  console.log(`Updated activity ${responseData.id} successfully`);
 }
 
 /**
