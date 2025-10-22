@@ -1,5 +1,7 @@
 # Strava Webhook - Avalanche Forecast Enrichment
 
+> **Last Updated:** October 2025
+
 AWS Lambda application that automatically adds NWAC avalanche forecasts to Strava BackcountrySki activities.
 
 ## Architecture
@@ -21,7 +23,7 @@ AWS Lambda application that automatically adds NWAC avalanche forecasts to Strav
 ✅ Activity description updates with full zone information
 ✅ Idempotent updates (won't duplicate forecasts)
 ✅ Simple web UI for onboarding
-✅ Comprehensive test suite (18 tests)
+✅ Comprehensive test suite (40 tests: 9 OAuth + 22 webhook + 9 Strava utilities)
 
 ## Prerequisites
 
@@ -230,7 +232,7 @@ If no forecast is available, you'll see a message explaining why:
 ### Local Testing
 
 ```bash
-# Run test suite (15 tests with mock data)
+# Run test suite (40 tests with mock data)
 npm test
 
 # Run tests in watch mode
