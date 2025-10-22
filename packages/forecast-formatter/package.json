@@ -1,0 +1,36 @@
+{
+  "name": "@multifarious/forecast-formatter",
+  "version": "0.1.0",
+  "description": "Formatter for NWAC avalanche forecasts - produces string representation with danger level indicators",
+  "main": "dist/index.js",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "demo": "tsx demo.ts"
+  },
+  "keywords": [
+    "avalanche",
+    "nwac",
+    "forecast",
+    "formatter"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@multifarious/forecast-api": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@multifarious/strava-webhook",
+  "version": "0.1.0",
+  "description": "Strava webhook handler with avalanche forecast enrichment",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc && npm run bundle && npm run copy-zones",
+    "bundle": "esbuild lambda/webhook.ts lambda/oauth.ts lambda/web.ts --bundle --platform=node --target=node20 --outdir=dist/lambda --external:@aws-sdk/* --format=cjs",
+    "copy-zones": "mkdir -p dist/lambda/data/zones && cp ../../packages/forecast-api/data/zones/*.geojson dist/lambda/data/zones/",
+    "watch": "tsc -w",
+    "test": "vitest",
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "diff": "cdk diff",
+    "destroy": "cdk destroy"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.709.0",
+    "@aws-sdk/lib-dynamodb": "^3.709.0",
+    "@multifarious/forecast-api": "^0.1.0",
+    "@multifarious/forecast-formatter": "^0.1.0",
+    "aws-cdk-lib": "^2.170.0",
+    "constructs": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^22.10.2",
+    "aws-cdk": "^2.170.0",
+    "esbuild": "^0.24.2",
+    "source-map-support": "^0.5.21",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
