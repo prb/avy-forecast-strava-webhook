@@ -14,6 +14,7 @@ import {
   mockActivityNoLocation,
   mockRunActivity,
   mockActivityWithForecast,
+  mockMidnightCrossingActivity,
   mockMtHoodForecast,
   expectedMtHoodForecastText,
   mockUser,
@@ -365,6 +366,80 @@ describe('Webhook Handler', () => {
       const body = JSON.parse(result.body);
       expect(body.message).toContain('failed');
       expect(body.error).toBe('Strava API error');
+    });
+
+    it('should use local date when activity crosses UTC midnight boundary', async () => {
+      const event: APIGatewayProxyEvent = {
+        httpMethod: 'POST',
+        body: JSON.stringify(mockWebhookEvent),
+      } as any;
+
+      // Mock activity that crosses UTC midnight (11:30 PM local = next day UTC)
+      vi.mocked(strava.getActivity).mockResolvedValue(mockMidnightCrossingActivity);
+
+      // Mock forecast response
+      const mockForecastProductResponse: ForecastProductResponse = {
+        zone: {
+          id: 3476,
+          zone_id: '10',
+          name: 'Mt Hood',
+          url: 'https://nwac.us/avalanche-forecast/#/mt-hood',
+        },
+        product: mockMtHoodForecast,
+      };
+      vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue(mockForecastProductResponse as any);
+
+      const result = await handler(event);
+
+      expect(result.statusCode).toBe(200);
+
+      // Verify forecast was looked up with LOCAL date (April 9), not UTC date (April 10)
+      expect(forecastApi.getForecastForCoordinate).toHaveBeenCalledWith(
+        { latitude: 45.4, longitude: -121.7 },
+        '2025-04-09',  // Local date from start_date_local
+        { includeProduct: true }
+      );
+
+      // Should update with forecast
+      expect(strava.updateActivity).toHaveBeenCalled();
+    });
+
+    it('should fallback to UTC date if start_date_local is missing', async () => {
+      const event: APIGatewayProxyEvent = {
+        httpMethod: 'POST',
+        body: JSON.stringify(mockWebhookEvent),
+      } as any;
+
+      // Mock activity without start_date_local
+      const activityWithoutLocal = {
+        ...mockBackcountryActivity,
+        start_date: '2025-04-10T14:30:00Z',
+        start_date_local: null as any,  // Missing local date
+      };
+      vi.mocked(strava.getActivity).mockResolvedValue(activityWithoutLocal);
+
+      // Mock forecast response
+      const mockForecastProductResponse: ForecastProductResponse = {
+        zone: {
+          id: 3476,
+          zone_id: '10',
+          name: 'Mt Hood',
+          url: 'https://nwac.us/avalanche-forecast/#/mt-hood',
+        },
+        product: mockMtHoodForecast,
+      };
+      vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue(mockForecastProductResponse as any);
+
+      const result = await handler(event);
+
+      expect(result.statusCode).toBe(200);
+
+      // Should fallback to UTC date when local date is missing
+      expect(forecastApi.getForecastForCoordinate).toHaveBeenCalledWith(
+        { latitude: 45.4, longitude: -121.7 },
+        '2025-04-10',  // UTC date from start_date (fallback)
+        { includeProduct: true }
+      );
     });
   });
 

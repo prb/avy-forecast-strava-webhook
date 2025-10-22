@@ -186,9 +186,11 @@ async function processActivity(
 
   // Extract coordinates and date
   const [latitude, longitude] = activity.start_latlng;
-  const activityDate = activity.start_date.split('T')[0]; // Extract YYYY-MM-DD
+  // Use local date for forecast lookup (handles UTC midnight crossings)
+  // Falls back to UTC date if start_date_local is missing
+  const activityDate = (activity.start_date_local || activity.start_date).split('T')[0];
 
-  console.log(`Looking up forecast for coordinates: ${latitude}, ${longitude} on ${activityDate}`);
+  console.log(`Looking up forecast for coordinates: ${latitude}, ${longitude} on ${activityDate} (local date)`);
 
   // Get avalanche forecast
   const forecastResult = await getForecastForCoordinate(

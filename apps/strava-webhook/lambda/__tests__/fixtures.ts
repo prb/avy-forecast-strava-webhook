@@ -123,6 +123,29 @@ export const mockActivityWithForecast: StravaActivity = {
 };
 
 /**
+ * Mock activity that crosses UTC midnight boundary
+ * Local time: April 9, 2025 at 11:30 PM Pacific (UTC-7)
+ * UTC time: April 10, 2025 at 6:30 AM
+ * Should use local date (April 9) for forecast lookup
+ */
+export const mockMidnightCrossingActivity: StravaActivity = {
+  id: 123456791,
+  type: 'BackcountrySki',
+  start_date: '2025-04-10T06:30:00Z',        // April 10 in UTC
+  start_date_local: '2025-04-09T23:30:00',   // April 9 in local time
+  start_latlng: [45.4, -121.7], // Mt Hood coordinates
+  end_latlng: [45.41, -121.71],
+  description: 'Late evening tour',
+  name: 'Sunset Ski',
+  distance: 3000,
+  moving_time: 5400,
+  elapsed_time: 5400,
+  total_elevation_gain: 800,
+  visibility: 'everyone',
+  private: false,
+};
+
+/**
  * Mock Strava user with valid tokens
  */
 export const mockUser: StravaUser = {
