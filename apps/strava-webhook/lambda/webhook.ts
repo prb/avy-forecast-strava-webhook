@@ -172,16 +172,34 @@ async function processActivity(
 
   // Check if activity has start location
   if (!activity.start_latlng || activity.start_latlng.length !== 2) {
-    console.log('Activity has no start location, skipping');
+    console.log('Activity has no start location, skipping forecast lookup');
+
+    // If user manually invoked with #avy_forecast, clean up title and add message
+    if (hasCommand) {
+      const newTitle = activity.name.replace(/#avy_forecast/g, '').trim();
+      const updates = {
+        name: newTitle,
+        description: (activity.description || '') + '\n\n[No avalanche forecast available: Activity has no location data]',
+      };
+      console.log(`Removing #avy_forecast from title: "${activity.name}" -> "${newTitle}"`);
+      await updateActivity(activityId, athleteId, updates);
+    }
     return;
   }
 
   // Check if description already has forecast (idempotency)
   // Look for our specific forecast URL pattern: nwac.us/avalanche-forecast/#/forecast/
+  // Skip if forecast exists, UNLESS user manually invoked with #avy_forecast (allows retry)
   const currentDescription = activity.description || '';
-  if (currentDescription.includes('nwac.us/avalanche-forecast/#/forecast/')) {
+  const hasForecast = currentDescription.includes('nwac.us/avalanche-forecast/#/forecast/');
+
+  if (hasForecast && !hasCommand) {
     console.log('Activity description already contains forecast, skipping update');
     return;
+  }
+
+  if (hasForecast && hasCommand) {
+    console.log('Refreshing existing forecast (manual #avy_forecast command)');
   }
 
   // Extract coordinates and date
@@ -202,12 +220,19 @@ async function processActivity(
   // Prepare description update
   let newDescription = currentDescription;
 
+  // If refreshing (manual command + existing forecast), remove old forecast first
+  if (hasForecast && hasCommand) {
+    // Remove existing forecast line (NWAC ... forecast: ... URL)
+    newDescription = currentDescription.replace(/\n\nNWAC [^\n]*\(https:\/\/nwac\.us\/avalanche-forecast[^\)]*\)/g, '').trim();
+    console.log('Removed old forecast from description');
+  }
+
   if (forecastResult.product) {
     console.log(`Found forecast for zone: ${forecastResult.zone.name}`);
 
     // Format the forecast with colored emoji squares
     const formattedForecast = formatForecast(forecastResult.product);
-    newDescription = currentDescription + `\n\n${formattedForecast}`;
+    newDescription = newDescription + `\n\n${formattedForecast}`;
   } else {
     console.log(`No forecast available: ${forecastResult.error || 'unknown reason'}`);
 
