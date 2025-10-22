@@ -49,7 +49,12 @@ describe('Strava API Utilities', () => {
     it('should filter activity objects to only safe fields', () => {
       const activity = {
         id: 12345,
-        athlete: { id: 123 },
+        athlete: {
+          id: 123,
+          username: 'johndoe',
+          firstname: 'John',
+          lastname: 'Doe',
+        },
         name: 'Morning Run',
         type: 'Run',
         sport_type: 'Run',
@@ -77,6 +82,12 @@ describe('Strava API Utilities', () => {
       expect(result.moving_time).toBe(3600);
       expect(result.elapsed_time).toBe(3700);
 
+      // Athlete should only have ID, no PII (names, username)
+      expect(result.athlete).toEqual({ id: 123 });
+      expect(result.athlete.firstname).toBeUndefined();
+      expect(result.athlete.lastname).toBeUndefined();
+      expect(result.athlete.username).toBeUndefined();
+
       // Should NOT have these fields
       expect(result.description).toBeUndefined();
       expect(result.start_latlng).toBeUndefined();
@@ -92,15 +103,20 @@ describe('Strava API Utilities', () => {
         athlete: {
           id: 123,
           access_token: 'secret',
-          name: 'John Doe',
+          firstname: 'John',
+          lastname: 'Doe',
         },
         description: 'a'.repeat(100),
       };
 
       const result = sanitizeForLogging(data);
 
-      expect(result.athlete.access_token).toBe('[REDACTED]');
-      expect(result.athlete.id).toBe(123);
+      // Athlete should be sanitized to only ID (no PII, no tokens)
+      expect(result.athlete).toEqual({ id: 123 });
+      expect(result.athlete.firstname).toBeUndefined();
+      expect(result.athlete.lastname).toBeUndefined();
+      expect(result.athlete.access_token).toBeUndefined();
+
       expect(result.description).toBe('a'.repeat(50) + '...');
     });
 

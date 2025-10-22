@@ -25,13 +25,19 @@ export function sanitizeForLogging(data: any): any {
   if (data && typeof data === 'object') {
     const sanitized: any = {};
 
-    // List of fields to keep from activity objects
-    const allowedFields = ['id', 'athlete', 'name', 'type', 'sport_type', 'start_date', 'moving_time', 'elapsed_time'];
+    // List of fields to keep from activity objects (excluding athlete - handled separately)
+    const allowedFields = ['id', 'name', 'type', 'sport_type', 'start_date', 'moving_time', 'elapsed_time'];
 
     for (const [key, value] of Object.entries(data)) {
       // Skip sensitive fields
       if (key === 'access_token' || key === 'refresh_token') {
         sanitized[key] = '[REDACTED]';
+        continue;
+      }
+
+      // Special handling for athlete field - only keep ID to avoid leaking PII (names)
+      if (key === 'athlete' && value && typeof value === 'object' && 'id' in value) {
+        sanitized[key] = { id: value.id };
         continue;
       }
 
