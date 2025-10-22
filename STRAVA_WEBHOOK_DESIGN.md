@@ -1,5 +1,8 @@
 # Strava Webhook Handler - Design Document
 
+> **Last Reviewed:** October 2025
+> **Status:** Reflects current implementation in `apps/strava-webhook/`
+
 ## Overview
 
 AWS Lambda function that listens for Strava webhook events, detects new BackcountrySki activities, fetches NWAC avalanche forecasts, and automatically appends forecast information to the activity description.
@@ -71,9 +74,9 @@ GET /webhook?hub.mode=subscribe&hub.verify_token=YOUR_VERIFY_TOKEN&hub.challenge
 ```
 
 **Event Types:**
-- `aspect_type: "create"` - New activity created ✅ **Handle this**
-- `aspect_type: "update"` - Activity updated ❌ Ignore for now
-- `aspect_type: "delete"` - Activity deleted ❌ Ignore for now
+- `aspect_type: "create"` - New activity created ✅ **Auto-process BackcountrySki activities**
+- `aspect_type: "update"` - Activity updated ✅ **Process when #avy_forecast command is present**
+- `aspect_type: "delete"` - Activity deleted ❌ Ignore
 
 **Object Types:**
 - `object_type: "activity"` ✅ **Handle this**
@@ -84,8 +87,9 @@ GET /webhook?hub.mode=subscribe&hub.verify_token=YOUR_VERIFY_TOKEN&hub.challenge
 ```
 1. Receive webhook POST
    ├─ object_type !== "activity" → Return 200 (ignore)
-   ├─ aspect_type !== "create" → Return 200 (ignore)
-   └─ Valid event → Continue
+   ├─ aspect_type === "create" AND type === "BackcountrySki" → Auto-process
+   ├─ aspect_type === "update" AND title contains "#avy_forecast" → Process manually
+   └─ Otherwise → Return 200 (ignore)
 
 2. Get activity details from Strava API
    GET https://www.strava.com/api/v3/activities/{object_id}
@@ -137,8 +141,8 @@ GET /webhook?hub.mode=subscribe&hub.verify_token=YOUR_VERIFY_TOKEN&hub.challenge
 - Refresh Token (for token renewal)
 
 **Token Storage:**
-- AWS Secrets Manager or SSM Parameter Store
-- Refresh token automatically when expired
+- DynamoDB table with per-user OAuth tokens
+- Refresh token automatically when expired (6-hour expiration)
 
 **Required Scopes:**
 - `read` - Read public activity data
@@ -218,16 +222,13 @@ interface LambdaEvent {
 # Strava API credentials
 STRAVA_CLIENT_ID=your_client_id
 STRAVA_CLIENT_SECRET=your_client_secret
-STRAVA_WEBHOOK_VERIFY_TOKEN=random_string_for_verification
+STRAVA_VERIFY_TOKEN=random_string_for_webhook_verification
 
-# OAuth tokens (stored in AWS Secrets Manager)
-# - Access Token
-# - Refresh Token
-# - Expires At
+# OAuth tokens (stored in DynamoDB per-user)
+# DynamoDB table: strava-avy-users
+# Fields: athlete_id, access_token, refresh_token, expires_at, username
 
-# NWAC Forecast Cache (optional)
-CACHE_TYPE=s3
-S3_BUCKET=your-cache-bucket
+# AWS Configuration
 AWS_REGION=us-west-2
 ```
 
@@ -302,9 +303,9 @@ AWS_REGION=us-west-2
    - Consider validating webhook signature if Strava provides one
 
 2. **OAuth Token Storage**
-   - Store tokens in AWS Secrets Manager
-   - Never log tokens
-   - Use IAM roles for Lambda access
+   - Store tokens in DynamoDB with encryption at rest
+   - Never log tokens (sanitize logging output)
+   - Use IAM roles for Lambda access to DynamoDB
 
 3. **API Rate Limiting**
    - Strava API has rate limits (600 requests/15 min, 30,000/day)
