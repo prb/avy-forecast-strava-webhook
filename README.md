@@ -80,6 +80,8 @@ npm test
 npm test -w @multifarious/forecast-api
 ```
 
+The Strava-oriented [GPX transformation tool](https://gotoes.org/strava/Add_Timestamps_To_GPX.php) from GOTOES is useful to quickly time-shift and alter GPX tracks for test uploads.
+
 ### Type Checking
 
 ```bash
