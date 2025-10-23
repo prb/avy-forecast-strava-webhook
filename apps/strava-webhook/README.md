@@ -382,4 +382,4 @@ This prevents:
 
 ## License
 
-MIT
+CC0 1.0 Universal (Public Domain)
