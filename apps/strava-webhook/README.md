@@ -1,8 +1,8 @@
-# Strava Webhook - Avalanche Forecast Enrichment
+# Avy Forecast Webhook
 
 > **Last Updated:** October 2025
 
-AWS Lambda application that automatically adds NWAC avalanche forecasts to Strava BackcountrySki activities.
+AWS Lambda application that automatically adds NWAC avalanche forecasts to your Strava BackcountrySki activities.
 
 ## Architecture
 
