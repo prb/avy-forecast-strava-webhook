@@ -1,126 +1,67 @@
-# Strava Avalanche Enrichment
+# Strava Avalanche Forecast Enrichment
 
-Monorepo for Strava webhook integration with avalanche forecast enrichment.
+Automatically enrich Strava backcountry ski activities with avalanche forecast information from the Northwest Avalanche Center (NWAC).
 
-## Project Structure
+## What It Does
 
-```
-strava-avy-enrich/
-├── packages/
-│   ├── forecast-api/         # NWAC forecast API (@multifarious/forecast-api)
-│   └── forecast-formatter/   # Forecast formatter (@multifarious/forecast-formatter)
-└── apps/                      # (Future) Main applications
-    └── strava-webhook/        # (Future) AWS Lambda Strava webhook handler
-```
-
-## Packages
-
-### @multifarious/forecast-api
-
-API to fetch NWAC (Northwest Avalanche Center) avalanche forecasts by GPS coordinates and date.
-
-**Features:**
-- GPS coordinate → avalanche zone lookup (point-in-polygon)
-- Forecast retrieval from avalanche.org API
-- Smart caching (local filesystem and S3)
-- TypeScript with full type definitions
-- 66 tests, all passing
-
-**See:** [packages/forecast-api/README.md](packages/forecast-api/README.md)
-
-### @multifarious/forecast-formatter
-
-String formatter for NWAC avalanche forecasts with colored danger level indicators.
-
-**Features:**
-- Converts forecast data to compact string representation
-- Colored unicode squares for danger levels (🟩🟨🟧🟥⬛)
-- Shows all elevation bands (above/near/below treeline)
-- 14 tests, all passing
+When you upload a BackcountrySki activity to Strava, this system automatically:
+1. Detects the activity location and date
+2. Fetches the relevant NWAC avalanche forecast
+3. Appends formatted forecast data to your activity description
 
 **Example output:**
 ```
 NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)
 ```
 
-**See:** [packages/forecast-formatter/README.md](packages/forecast-formatter/README.md)
-
-## Getting Started
+## Quick Start
 
 ### Prerequisites
-
-- Node.js v18+ (currently using v24.9.0)
-- npm v9+ (currently using v11.6.2)
+- Node.js 20+
+- AWS Account (for deployment)
+- Strava API application
 
 ### Installation
-
 ```bash
 npm install
 ```
 
-This will install dependencies for all workspace packages.
-
-### Building
-
+### Build
 ```bash
-# Build all packages
 npm run build
-
-# Build specific package
-npm run build -w @multifarious/forecast-api
 ```
 
-### Testing
-
+### Test
 ```bash
-# Run tests for all packages
 npm test
-
-# Run tests for specific package
-npm test -w @multifarious/forecast-api
 ```
 
-The Strava-oriented [GPX transformation tool](https://gotoes.org/strava/Add_Timestamps_To_GPX.php) from GOTOES is useful to quickly time-shift and alter GPX tracks for test uploads.
+## Project Structure
 
-### Type Checking
+This is a TypeScript monorepo with three main components:
 
-```bash
-# Type check all packages
-npm run type-check
-```
+**Packages:**
+- **forecast-api** - Fetch NWAC forecasts by GPS coordinates ([docs](packages/forecast-api/README.md))
+- **forecast-formatter** - Format forecasts with colored danger indicators ([docs](packages/forecast-formatter/README.md))
 
-## Development
+**Application:**
+- **strava-webhook** - AWS Lambda application for Strava webhook integration ([docs](apps/strava-webhook/README.md))
 
-### Adding a New Package
+## Documentation
 
-1. Create a new directory under `packages/` or `apps/`
-2. Initialize with `package.json` using `@multifarious` scope
-3. Add TypeScript config that extends root `tsconfig.json`
-4. The package will be automatically included in workspace commands
+- **[SPECIFICATION.md](SPECIFICATION.md)** - Complete system specification and architecture
+- **[RESEARCH_FINDINGS.md](packages/forecast-api/RESEARCH_FINDINGS.md)** - NWAC API research and findings
+- **[Deployment Guide](apps/strava-webhook/README.md)** - AWS deployment instructions
 
-### Using forecast-api in Other Packages
+## Status
 
-```typescript
-import { getForecastForCoordinate } from '@multifarious/forecast-api';
-import type { Coordinate, ForecastResponse } from '@multifarious/forecast-api';
+**Production Ready** - All components complete with 120+ passing tests.
 
-const result = await getForecastForCoordinate(
-  { latitude: 47.7455, longitude: -121.0886 },
-  '2025-01-15'
-);
-
-if (result.forecast) {
-  console.log(`Danger rating: ${result.forecast.danger_rating}`);
-  console.log(`URL: ${result.forecast.url}`);
-}
-```
-
-## Project Status
-
-- [x] Forecast API package (complete, 66 tests passing)
-- [x] Forecast formatter package (complete, 14 tests passing)
-- [ ] Strava webhook Lambda handler (planned)
-- [ ] Additional packages TBD
+- ✅ Forecast API (66 tests)
+- ✅ Forecast formatter (14 tests)
+- ✅ Strava webhook handler (40 tests)
+- ✅ Multi-user OAuth flow
+- ✅ AWS CDK infrastructure
 
 ## License
 
