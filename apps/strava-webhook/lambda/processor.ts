@@ -117,10 +117,12 @@ async function processActivity(
   }
 
   // Check if description already has forecast (idempotency)
-  // Look for our specific forecast URL pattern: nwac.us/avalanche-forecast/#/forecast/
-  // Skip if forecast exists, UNLESS user manually invoked with #avy_forecast (allows retry)
+  // Look for our specific forecast text pattern or the URL
+  // Pattern: "NWAC [Zone Name] Zone forecast:"
   const currentDescription = activity.description || '';
-  const hasForecast = currentDescription.includes('nwac.us/avalanche-forecast/#/forecast/');
+  const hasForecast =
+    currentDescription.includes('nwac.us/avalanche-forecast/#/forecast/') ||
+    /NWAC .* Zone forecast:/.test(currentDescription);
 
   if (hasForecast && !hasCommand) {
     console.log('Activity description already contains forecast, skipping update');

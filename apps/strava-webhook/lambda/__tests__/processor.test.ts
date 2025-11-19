@@ -190,6 +190,23 @@ describe('Webhook Handler', () => {
       expect(strava.updateActivity).not.toHaveBeenCalled();
     });
 
+    it('should not duplicate forecast if text pattern matches but URL is different/missing', async () => {
+      const event = createSQSEvent(mockWebhookEvent);
+
+      // Mock activity with existing forecast but URL is shortened/different
+      const activityWithShortenedUrl = {
+        ...mockBackcountryActivity,
+        description: 'Great day!\n\nNWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://strava.app.link/xyz)',
+      };
+      vi.mocked(strava.getActivity).mockResolvedValue(activityWithShortenedUrl);
+
+      await handler(event, {} as any, {} as any);
+
+      // Currently this fails (it WILL call updateActivity because URL check fails)
+      // We want it to NOT call updateActivity
+      expect(strava.updateActivity).not.toHaveBeenCalled();
+    });
+
     it('should add forecast even if description mentions NWAC naturally', async () => {
       const event = createSQSEvent(mockWebhookEvent);
 
