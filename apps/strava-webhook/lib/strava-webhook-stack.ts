@@ -71,7 +71,7 @@ export class StravaWebhookStack extends cdk.Stack {
     // Lambda Function: Ingest Handler (API Gateway -> SQS)
     // ============================================
     const ingestFunction = new lambda.Function(this, 'IngestHandler', {
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'ingest.handler',
       code: lambda.Code.fromAsset('dist/lambda'),
       timeout: cdk.Duration.seconds(3), // Fast response required
@@ -88,7 +88,7 @@ export class StravaWebhookStack extends cdk.Stack {
     // Lambda Function: Processor Handler (SQS -> Logic)
     // ============================================
     const processorFunction = new lambda.Function(this, 'ProcessorHandler', {
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'processor.handler',
       code: lambda.Code.fromAsset('dist/lambda'),
       timeout: cdk.Duration.seconds(30),
@@ -110,7 +110,7 @@ export class StravaWebhookStack extends cdk.Stack {
     // Lambda Function: OAuth Flow
     // ============================================
     const oauthFunction = new lambda.Function(this, 'OAuthHandler', {
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'oauth.handler',
       code: lambda.Code.fromAsset('dist/lambda'),
       timeout: cdk.Duration.seconds(10),
@@ -128,7 +128,7 @@ export class StravaWebhookStack extends cdk.Stack {
     // Lambda Function: Web UI
     // ============================================
     const webFunction = new lambda.Function(this, 'WebHandler', {
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'web.handler',
       code: lambda.Code.fromAsset('dist/lambda'),
       timeout: cdk.Duration.seconds(5),
