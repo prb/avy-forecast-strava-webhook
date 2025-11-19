@@ -1,10 +1,10 @@
 /**
- * Tests for Strava webhook handler
+ * Tests for Strava webhook handler (Processor Lambda)
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { APIGatewayProxyEvent } from 'aws-lambda';
-import { handler } from '../webhook.js';
+import type { SQSEvent } from 'aws-lambda';
+import { handler } from '../processor.js';
 import type { ForecastProductResponse, ForecastResponse } from '@multifarious/forecast-api';
 import {
   mockWebhookEvent,
@@ -43,6 +43,23 @@ import * as strava from '../strava.js';
 import * as forecastApi from '@multifarious/forecast-api';
 import * as db from '../db.js';
 
+// Helper to create SQS event from body
+const createSQSEvent = (body: any): SQSEvent => ({
+  Records: [
+    {
+      messageId: '1',
+      receiptHandle: 'handle',
+      body: JSON.stringify(body),
+      attributes: {} as any,
+      messageAttributes: {},
+      md5OfBody: 'hash',
+      eventSource: 'aws:sqs',
+      eventSourceARN: 'arn',
+      awsRegion: 'us-west-2',
+    },
+  ],
+});
+
 describe('Webhook Handler', () => {
   beforeEach(() => {
     // Reset all mocks before each test
@@ -52,73 +69,27 @@ describe('Webhook Handler', () => {
     vi.mocked(db.getUser).mockResolvedValue(mockUser);
   });
 
-  describe('GET request (verification)', () => {
-    it('should verify webhook subscription with correct token', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'GET',
-        queryStringParameters: {
-          'hub.mode': 'subscribe',
-          'hub.verify_token': process.env.STRAVA_VERIFY_TOKEN || 'test_token',
-          'hub.challenge': 'challenge_12345',
-        },
-      } as any;
 
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(200);
-      expect(result.headers?.['Content-Type']).toBe('application/json');
-      const body = JSON.parse(result.body);
-      expect(body['hub.challenge']).toBe('challenge_12345');
-    });
-
-    it('should reject verification with incorrect token', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'GET',
-        queryStringParameters: {
-          'hub.mode': 'subscribe',
-          'hub.verify_token': 'wrong_token',
-          'hub.challenge': 'challenge_12345',
-        },
-      } as any;
-
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(403);
-      const body = JSON.parse(result.body);
-      expect(body.error).toBe('Verification failed');
-    });
-  });
-
-  describe('POST request (webhook events)', () => {
+  describe('SQS Event Processing', () => {
     it('should ignore non-activity events', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify({
-          object_type: 'athlete',
-          aspect_type: 'update',
-        }),
-      } as any;
+      const event = createSQSEvent({
+        object_type: 'athlete',
+        aspect_type: 'update',
+      });
 
-      const result = await handler(event);
+      await handler(event, {} as any, {} as any);
 
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body.message).toContain('ignored');
       expect(strava.getActivity).not.toHaveBeenCalled();
     });
 
     it('should ignore activity update events without #avy_forecast command', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockUpdateWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockUpdateWebhookEvent);
 
       // Mock activity without #avy_forecast in title
       vi.mocked(strava.getActivity).mockResolvedValue(mockBackcountryActivity);
 
-      const result = await handler(event);
+      await handler(event, {} as any, {} as any);
 
-      expect(result.statusCode).toBe(200);
       expect(strava.getActivity).toHaveBeenCalled();
       // Should not process without command
       expect(forecastApi.getForecastForCoordinate).not.toHaveBeenCalled();
@@ -126,16 +97,12 @@ describe('Webhook Handler', () => {
     });
 
     it('should ignore non-BackcountrySki activities', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockRunWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockRunWebhookEvent);
 
       vi.mocked(strava.getActivity).mockResolvedValue(mockRunActivity);
 
-      const result = await handler(event);
+      await handler(event, {} as any, {} as any);
 
-      expect(result.statusCode).toBe(200);
       expect(strava.getActivity).toHaveBeenCalledWith(
         mockRunWebhookEvent.object_id,
         mockRunWebhookEvent.owner_id
@@ -145,26 +112,19 @@ describe('Webhook Handler', () => {
     });
 
     it('should ignore activities without location', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockWebhookEvent);
 
       vi.mocked(strava.getActivity).mockResolvedValue(mockActivityNoLocation);
 
-      const result = await handler(event);
+      await handler(event, {} as any, {} as any);
 
-      expect(result.statusCode).toBe(200);
       expect(strava.getActivity).toHaveBeenCalled();
       expect(forecastApi.getForecastForCoordinate).not.toHaveBeenCalled();
       expect(strava.updateActivity).not.toHaveBeenCalled();
     });
 
     it('should add rich forecast to BackcountrySki activity description', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockWebhookEvent);
 
       // Mock activity fetch
       vi.mocked(strava.getActivity).mockResolvedValue(mockBackcountryActivity);
@@ -183,9 +143,7 @@ describe('Webhook Handler', () => {
         mockForecastProductResponse as any
       );
 
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(200);
+      await handler(event, {} as any, {} as any);
 
       // Verify activity was fetched
       expect(strava.getActivity).toHaveBeenCalledWith(
@@ -218,17 +176,13 @@ describe('Webhook Handler', () => {
     });
 
     it('should not duplicate forecast if already present (idempotency)', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockWebhookEvent);
 
       // Mock activity with existing forecast
       vi.mocked(strava.getActivity).mockResolvedValue(mockActivityWithForecast);
 
-      const result = await handler(event);
+      await handler(event, {} as any, {} as any);
 
-      expect(result.statusCode).toBe(200);
       expect(strava.getActivity).toHaveBeenCalled();
 
       // Should not fetch forecast or update description
@@ -236,11 +190,25 @@ describe('Webhook Handler', () => {
       expect(strava.updateActivity).not.toHaveBeenCalled();
     });
 
+    it('should not duplicate forecast if text pattern matches but URL is different/missing', async () => {
+      const event = createSQSEvent(mockWebhookEvent);
+
+      // Mock activity with existing forecast but URL is shortened/different
+      const activityWithShortenedUrl = {
+        ...mockBackcountryActivity,
+        description: 'Great day!\n\nNWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://strava.app.link/xyz)',
+      };
+      vi.mocked(strava.getActivity).mockResolvedValue(activityWithShortenedUrl);
+
+      await handler(event, {} as any, {} as any);
+
+      // Currently this fails (it WILL call updateActivity because URL check fails)
+      // We want it to NOT call updateActivity
+      expect(strava.updateActivity).not.toHaveBeenCalled();
+    });
+
     it('should add forecast even if description mentions NWAC naturally', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockWebhookEvent);
 
       // Activity that mentions NWAC/forecast but doesn't have our generated forecast
       const activityWithNaturalMention: typeof mockBackcountryActivity = {
@@ -263,9 +231,7 @@ describe('Webhook Handler', () => {
         mockForecastProductResponse as any
       );
 
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(200);
+      await handler(event, {} as any, {} as any);
 
       // Should still add the forecast despite natural mention of NWAC/forecast
       expect(forecastApi.getForecastForCoordinate).toHaveBeenCalled();
@@ -279,10 +245,7 @@ describe('Webhook Handler', () => {
     });
 
     it('should handle missing forecast gracefully', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockWebhookEvent);
 
       vi.mocked(strava.getActivity).mockResolvedValue(mockBackcountryActivity);
 
@@ -299,9 +262,8 @@ describe('Webhook Handler', () => {
 
       vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue(noForecastResponse as any);
 
-      const result = await handler(event);
+      await handler(event, {} as any, {} as any);
 
-      expect(result.statusCode).toBe(200);
       expect(strava.getActivity).toHaveBeenCalled();
       expect(forecastApi.getForecastForCoordinate).toHaveBeenCalled();
 
@@ -311,10 +273,7 @@ describe('Webhook Handler', () => {
     });
 
     it('should handle full product fetch failure gracefully', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockWebhookEvent);
 
       vi.mocked(strava.getActivity).mockResolvedValue(mockBackcountryActivity);
 
@@ -339,9 +298,8 @@ describe('Webhook Handler', () => {
       // Mock full product fetch returning null
       vi.mocked(forecastApi.fetchNWACForecastForZone).mockResolvedValue(null);
 
-      const result = await handler(event);
+      await handler(event, {} as any, {} as any);
 
-      expect(result.statusCode).toBe(200);
       expect(strava.getActivity).toHaveBeenCalled();
       expect(forecastApi.getForecastForCoordinate).toHaveBeenCalled();
       expect(forecastApi.fetchNWACForecastForZone).not.toHaveBeenCalled();
@@ -350,29 +308,18 @@ describe('Webhook Handler', () => {
       expect(strava.updateActivity).not.toHaveBeenCalled();
     });
 
-    it('should return 200 even if activity processing fails (prevents retries)', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockWebhookEvent),
-      } as any;
+    it('should throw error if activity processing fails (triggers SQS retry)', async () => {
+      const event = createSQSEvent(mockWebhookEvent);
 
       // Mock Strava API error
       vi.mocked(strava.getActivity).mockRejectedValue(new Error('Strava API error'));
 
-      const result = await handler(event);
-
-      // Should return 200 to prevent Strava retries
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body.message).toContain('failed');
-      expect(body.error).toBe('Strava API error');
+      // Should throw error to trigger SQS retry
+      await expect(handler(event, {} as any, {} as any)).rejects.toThrow('Strava API error');
     });
 
     it('should use local date when activity crosses UTC midnight boundary', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockWebhookEvent);
 
       // Mock activity that crosses UTC midnight (11:30 PM local = next day UTC)
       vi.mocked(strava.getActivity).mockResolvedValue(mockMidnightCrossingActivity);
@@ -383,15 +330,12 @@ describe('Webhook Handler', () => {
           id: 3476,
           zone_id: '10',
           name: 'Mt Hood',
-          url: 'https://nwac.us/avalanche-forecast/#/mt-hood',
         },
         product: mockMtHoodForecast,
       };
       vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue(mockForecastProductResponse as any);
 
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(200);
+      await handler(event, {} as any, {} as any);
 
       // Verify forecast was looked up with LOCAL date (April 9), not UTC date (April 10)
       expect(forecastApi.getForecastForCoordinate).toHaveBeenCalledWith(
@@ -405,10 +349,7 @@ describe('Webhook Handler', () => {
     });
 
     it('should fallback to UTC date if start_date_local is missing', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockWebhookEvent);
 
       // Mock activity without start_date_local
       const activityWithoutLocal = {
@@ -424,15 +365,12 @@ describe('Webhook Handler', () => {
           id: 3476,
           zone_id: '10',
           name: 'Mt Hood',
-          url: 'https://nwac.us/avalanche-forecast/#/mt-hood',
         },
         product: mockMtHoodForecast,
       };
       vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue(mockForecastProductResponse as any);
 
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(200);
+      await handler(event, {} as any, {} as any);
 
       // Should fallback to UTC date when local date is missing
       expect(forecastApi.getForecastForCoordinate).toHaveBeenCalledWith(
@@ -445,10 +383,7 @@ describe('Webhook Handler', () => {
 
   describe('#avy_forecast command', () => {
     it('should process update events with #avy_forecast command', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockUpdateWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockUpdateWebhookEvent);
 
       // Mock activity with #avy_forecast in title
       const activityWithCommand = {
@@ -470,9 +405,8 @@ describe('Webhook Handler', () => {
         mockForecastProductResponse as any
       );
 
-      const result = await handler(event);
+      await handler(event, {} as any, {} as any);
 
-      expect(result.statusCode).toBe(200);
       expect(forecastApi.getForecastForCoordinate).toHaveBeenCalled();
 
       // Should remove #avy_forecast from title and update description
@@ -487,10 +421,7 @@ describe('Webhook Handler', () => {
     });
 
     it('should remove #avy_forecast even when no forecast is available', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockUpdateWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockUpdateWebhookEvent);
 
       // Mock activity with #avy_forecast in title
       const activityWithCommand = {
@@ -511,9 +442,7 @@ describe('Webhook Handler', () => {
       };
       vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue(noForecastResponse as any);
 
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(200);
+      await handler(event, {} as any, {} as any);
 
       // Should remove #avy_forecast from title and add error message
       expect(strava.updateActivity).toHaveBeenCalledWith(
@@ -527,10 +456,7 @@ describe('Webhook Handler', () => {
     });
 
     it('should work for non-BackcountrySki activities with #avy_forecast', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockUpdateWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockUpdateWebhookEvent);
 
       // Mock non-BackcountrySki activity with #avy_forecast
       const hikeActivityWithCommand = {
@@ -552,19 +478,15 @@ describe('Webhook Handler', () => {
         mockForecastProductResponse as any
       );
 
-      const result = await handler(event);
+      await handler(event, {} as any, {} as any);
 
-      expect(result.statusCode).toBe(200);
       // Should process even though it's not BackcountrySki
       expect(forecastApi.getForecastForCoordinate).toHaveBeenCalled();
       expect(strava.updateActivity).toHaveBeenCalled();
     });
 
     it('should refresh existing forecast when #avy_forecast command is used', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockUpdateWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockUpdateWebhookEvent);
 
       // Mock activity with existing forecast and #avy_forecast command
       const activityWithOldForecast = {
@@ -585,9 +507,7 @@ describe('Webhook Handler', () => {
       };
       vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue(mockForecastProductResponse as any);
 
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(200);
+      await handler(event, {} as any, {} as any);
 
       // Should fetch new forecast even though old one exists
       expect(forecastApi.getForecastForCoordinate).toHaveBeenCalled();
@@ -609,10 +529,7 @@ describe('Webhook Handler', () => {
     });
 
     it('should remove #avy_forecast and add message for no-location activity', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: JSON.stringify(mockUpdateWebhookEvent),
-      } as any;
+      const event = createSQSEvent(mockUpdateWebhookEvent);
 
       // Mock activity with #avy_forecast but no location
       const activityNoLocationWithCommand = {
@@ -621,9 +538,7 @@ describe('Webhook Handler', () => {
       };
       vi.mocked(strava.getActivity).mockResolvedValue(activityNoLocationWithCommand);
 
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(200);
+      await handler(event, {} as any, {} as any);
 
       // Should NOT look up forecast (no location)
       expect(forecastApi.getForecastForCoordinate).not.toHaveBeenCalled();
@@ -641,42 +556,12 @@ describe('Webhook Handler', () => {
   });
 
   describe('Error handling', () => {
-    it('should handle missing request body', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: null,
-      } as any;
-
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.error).toBe('Missing request body');
-    });
-
-    it('should handle invalid HTTP method', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'DELETE',
-      } as any;
-
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(405);
-      const body = JSON.parse(result.body);
-      expect(body.error).toBe('Method not allowed');
-    });
-
     it('should handle malformed JSON in body', async () => {
-      const event: APIGatewayProxyEvent = {
-        httpMethod: 'POST',
-        body: 'invalid json{',
-      } as any;
+      const event = createSQSEvent({});
+      event.Records[0].body = 'invalid json{';
 
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(500);
-      const body = JSON.parse(result.body);
-      expect(body.error).toBe('Internal server error');
+      // Should throw error to trigger SQS retry
+      await expect(handler(event, {} as any, {} as any)).rejects.toThrow();
     });
   });
 });
