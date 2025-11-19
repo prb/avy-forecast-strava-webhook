@@ -3,6 +3,8 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import { Construct } from 'constructs';
 
 export class StravaWebhookStack extends cdk.Stack {
@@ -40,6 +42,14 @@ export class StravaWebhookStack extends cdk.Stack {
     });
 
     // ============================================
+    // SQS Queue for Webhook Events
+    // ============================================
+    const webhookQueue = new sqs.Queue(this, 'StravaWebhookQueue', {
+      visibilityTimeout: cdk.Duration.seconds(60), // Give Lambda 60s to process
+      retentionPeriod: cdk.Duration.days(4), // Keep messages for 4 days
+    });
+
+    // ============================================
     // Environment Variables for All Lambdas
     // ============================================
     const commonEnvironment = {
@@ -48,25 +58,47 @@ export class StravaWebhookStack extends cdk.Stack {
       STRAVA_CLIENT_ID: process.env.STRAVA_CLIENT_ID || '',
       STRAVA_CLIENT_SECRET: process.env.STRAVA_CLIENT_SECRET || '',
       STRAVA_VERIFY_TOKEN: process.env.STRAVA_VERIFY_TOKEN || '',
-      // OAuth redirect URI will be constructed from request headers in the Lambda
+      QUEUE_URL: webhookQueue.queueUrl,
     };
 
     // ============================================
-    // Lambda Function: Webhook Handler
+    // Lambda Function: Ingest Handler (API Gateway -> SQS)
     // ============================================
-    const webhookFunction = new lambda.Function(this, 'WebhookHandler', {
+    const ingestFunction = new lambda.Function(this, 'IngestHandler', {
       runtime: lambda.Runtime.NODEJS_20_X,
-      handler: 'webhook.handler',
+      handler: 'ingest.handler',
+      code: lambda.Code.fromAsset('dist/lambda'),
+      timeout: cdk.Duration.seconds(3), // Fast response required
+      memorySize: 128,
+      environment: commonEnvironment,
+      logRetention: logs.RetentionDays.ONE_WEEK,
+      description: 'Ingests Strava webhook events and pushes to SQS',
+    });
+
+    // Grant SQS permissions
+    webhookQueue.grantSendMessages(ingestFunction);
+
+    // ============================================
+    // Lambda Function: Processor Handler (SQS -> Logic)
+    // ============================================
+    const processorFunction = new lambda.Function(this, 'ProcessorHandler', {
+      runtime: lambda.Runtime.NODEJS_20_X,
+      handler: 'processor.handler',
       code: lambda.Code.fromAsset('dist/lambda'),
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
       environment: commonEnvironment,
       logRetention: logs.RetentionDays.ONE_WEEK,
-      description: 'Handles Strava webhook events for activity creation',
+      description: 'Processes Strava webhook events from SQS',
     });
 
     // Grant DynamoDB permissions
-    usersTable.grantReadWriteData(webhookFunction);
+    usersTable.grantReadWriteData(processorFunction);
+
+    // Add SQS Event Source
+    processorFunction.addEventSource(new lambdaEventSources.SqsEventSource(webhookQueue, {
+      batchSize: 1, // Process one at a time for simplicity
+    }));
 
     // ============================================
     // Lambda Function: OAuth Flow
@@ -126,9 +158,9 @@ export class StravaWebhookStack extends cdk.Stack {
     const root = api.root;
     root.addMethod('GET', new apigateway.LambdaIntegration(webFunction));
 
-    // Webhook: GET/POST /webhook - Strava webhook endpoint
+    // Webhook: GET/POST /webhook - Strava webhook endpoint (Points to Ingest)
     const webhook = api.root.addResource('webhook');
-    webhook.addMethod('GET', new apigateway.LambdaIntegration(webhookFunction), {
+    webhook.addMethod('GET', new apigateway.LambdaIntegration(ingestFunction), {
       // Webhook verification
       requestParameters: {
         'method.request.querystring.hub.mode': true,
@@ -136,7 +168,7 @@ export class StravaWebhookStack extends cdk.Stack {
         'method.request.querystring.hub.verify_token': true,
       },
     });
-    webhook.addMethod('POST', new apigateway.LambdaIntegration(webhookFunction));
+    webhook.addMethod('POST', new apigateway.LambdaIntegration(ingestFunction));
 
     // OAuth: GET /connect - Start OAuth flow (redirect to Strava)
     const connect = api.root.addResource('connect');

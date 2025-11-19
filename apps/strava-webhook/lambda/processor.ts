@@ -4,93 +4,43 @@
  * Handles webhook events from Strava for activity creation
  */
 
-import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
+/**
+ * Strava Webhook Processor Lambda
+ *
+ * Processes queued webhook events from SQS.
+ * Fetches forecasts and updates Strava activities.
+ */
+
+import type { SQSEvent, SQSHandler } from 'aws-lambda';
 import type { StravaWebhookEvent } from './types.js';
 import { getActivity, updateActivity } from './strava.js';
 import { getForecastForCoordinate } from '@multifarious/forecast-api';
 import { formatForecast } from '@multifarious/forecast-formatter';
 
-const VERIFY_TOKEN = process.env.STRAVA_VERIFY_TOKEN!;
-
 /**
- * Main Lambda handler
+ * Main Lambda handler for SQS
  */
-export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  console.log('Webhook event received:', JSON.stringify(event, null, 2));
+export const handler: SQSHandler = async (event: SQSEvent): Promise<void> => {
+  console.log(`Processing ${event.Records.length} records`);
 
-  try {
-    // Handle GET request (webhook subscription verification)
-    if (event.httpMethod === 'GET') {
-      return handleVerification(event);
+  for (const record of event.Records) {
+    try {
+      const webhookEvent: StravaWebhookEvent = JSON.parse(record.body);
+      await processWebhookEvent(webhookEvent);
+    } catch (error) {
+      console.error('Error processing record:', error);
+      // Throwing error here will cause SQS to retry this message (visibility timeout)
+      // If you want to skip bad messages, catch and log only.
+      // For now, we throw to ensure retries on transient failures.
+      throw error;
     }
-
-    // Handle POST request (webhook event notification)
-    if (event.httpMethod === 'POST') {
-      return await handleWebhookEvent(event);
-    }
-
-    return {
-      statusCode: 405,
-      body: JSON.stringify({ error: 'Method not allowed' }),
-    };
-  } catch (error) {
-    console.error('Error handling webhook:', error);
-
-    return {
-      statusCode: 500,
-      body: JSON.stringify({
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      }),
-    };
   }
-}
+};
 
 /**
- * Handle webhook subscription verification (GET request)
+ * Process a single webhook event
  */
-function handleVerification(event: APIGatewayProxyEvent): APIGatewayProxyResult {
-  const params = event.queryStringParameters || {};
-  const mode = params['hub.mode'];
-  const token = params['hub.verify_token'];
-  const challenge = params['hub.challenge'];
-
-  console.log('Webhook verification request:', { mode, token, challenge });
-
-  // Verify the token matches
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('Webhook verified successfully');
-
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 'hub.challenge': challenge }),
-    };
-  }
-
-  console.error('Webhook verification failed: invalid verify token');
-
-  return {
-    statusCode: 403,
-    body: JSON.stringify({ error: 'Verification failed' }),
-  };
-}
-
-/**
- * Handle webhook event notification (POST request)
- */
-async function handleWebhookEvent(
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> {
-  if (!event.body) {
-    return {
-      statusCode: 400,
-      body: JSON.stringify({ error: 'Missing request body' }),
-    };
-  }
-
-  const webhookEvent: StravaWebhookEvent = JSON.parse(event.body);
-
+async function processWebhookEvent(webhookEvent: StravaWebhookEvent): Promise<void> {
   console.log('Processing webhook event:', webhookEvent);
 
   // Filter: Only process activity creation or update events
@@ -99,36 +49,15 @@ async function handleWebhookEvent(
     (webhookEvent.aspect_type !== 'create' && webhookEvent.aspect_type !== 'update')
   ) {
     console.log('Ignoring non-activity event');
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: 'Event ignored (not an activity create/update)' }),
-    };
+    return;
   }
 
   // Process the activity
-  try {
-    await processActivity(
-      webhookEvent.object_id,
-      webhookEvent.owner_id,
-      webhookEvent.aspect_type
-    );
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ message: 'Activity processed successfully' }),
-    };
-  } catch (error) {
-    // Log error but still return 200 to Strava to prevent retries
-    console.error('Error processing activity:', error);
-
-    return {
-      statusCode: 200,
-      body: JSON.stringify({
-        message: 'Activity processing failed (error logged)',
-        error: error instanceof Error ? error.message : 'Unknown error',
-      }),
-    };
-  }
+  await processActivity(
+    webhookEvent.object_id,
+    webhookEvent.owner_id,
+    webhookEvent.aspect_type
+  );
 }
 
 /**
