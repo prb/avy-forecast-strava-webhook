@@ -5,6 +5,7 @@ import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import * as sns from 'aws-cdk-lib/aws-sns';
+import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
 import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import { Construct } from 'constructs';
@@ -230,11 +231,18 @@ export class StravaWebhookStack extends cdk.Stack {
       displayName: 'Strava Webhook Alerts',
     });
 
-    // Add email subscription (Change email in console or via parameter if needed)
-    // For now, we'll output the topic ARN so user can subscribe manually or we can add a parameter later.
+    // Add email subscription
+    const alertEmail = `avywebhook-${environment}@mult.ifario.us`;
+    alarmTopic.addSubscription(new subs.EmailSubscription(alertEmail));
+
     new cdk.CfnOutput(this, 'AlarmTopicArn', {
       value: alarmTopic.topicArn,
-      description: 'SNS Topic for critical alerts (subscribe your email here)',
+      description: 'SNS Topic for critical alerts',
+    });
+
+    new cdk.CfnOutput(this, 'AlertEmail', {
+      value: alertEmail,
+      description: 'Email address subscribed to alerts',
     });
 
     // 2. Metric Filter for Errors
