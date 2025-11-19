@@ -17,7 +17,7 @@ NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/avalanche-forecas
 ## Quick Start
 
 ### Prerequisites
-- Node.js 20+
+- Node.js 22+
 - AWS Account (for deployment)
 - Strava API application
 
@@ -49,6 +49,7 @@ This is a TypeScript monorepo with three main components:
 
 ## Documentation
 
+- **[OPERATIONS.md](OPERATIONS.md)** - Deployment, monitoring, and operations guide
 - **[SPECIFICATION.md](SPECIFICATION.md)** - Complete system specification and architecture
 - **[RESEARCH_FINDINGS.md](packages/forecast-api/RESEARCH_FINDINGS.md)** - NWAC API research and findings
 - **[Deployment Guide](apps/strava-webhook/README.md)** - AWS deployment instructions

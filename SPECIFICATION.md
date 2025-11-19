@@ -28,44 +28,57 @@ Backcountry skiers and snowboarders in the Pacific Northwest who use Strava to t
 └──────┬───────┘
        │
        ▼
-┌─────────────────────────────────────────────────────────┐
-│              AWS Infrastructure                          │
-│                                                          │
-│  ┌──────────────┐        ┌─────────────────────┐       │
-│  │ API Gateway  │───────▶│ Lambda Functions    │       │
-│  │              │        │ - webhook           │       │
-│  │ /webhook     │        │ - oauth             │       │
-│  │ /connect     │        │ - web               │       │
-│  │ /callback    │        └────────┬────────────┘       │
-│  └──────────────┘                 │                     │
-│                                   │                     │
-│                          ┌────────┴─────────┐           │
-│                          │                  │           │
-│                          ▼                  ▼           │
-│                  ┌────────────┐    ┌────────────┐      │
-│                  │ DynamoDB   │    │ DynamoDB   │      │
-│                  │ Users      │    │ OAuth      │      │
-│                  │ Table      │    │ State      │      │
-│                  └────────────┘    └────────────┘      │
-└─────────────────────────────────────────────────────────┘
-                          │
-          ┌───────────────┴───────────────┐
-          │                               │
-          ▼                               ▼
-┌──────────────────┐           ┌──────────────────┐
-│  Strava API      │           │ Avalanche.org    │
-│  - Activities    │           │ API              │
-│  - OAuth         │           │ - Forecasts      │
-└──────────────────┘           └──────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│              AWS Infrastructure                                 │
+│                                                                 │
+│  ┌──────────────┐        ┌──────────────┐      ┌────────────┐ │
+│  │ API Gateway  │───────▶│ Ingest Lambda│─────▶│  SQS Queue │ │
+│  │              │        │ (Fast Reply) │      │            │ │
+│  │ /webhook     │        └──────────────┘      └──────┬─────┘ │
+│  │ /connect     │                                     │        │
+│  │ /callback    │                                     │        │
+│  │ /            │                                     ▼        │
+│  └──────┬───────┘                          ┌────────────────┐ │
+│         │                                  │ Processor Lambda│ │
+│         │                                  │  (Heavy Work)  │ │
+│         │                                  └────────┬────────┘ │
+│         │                                           │          │
+│         │                  ┌────────────────────────┴──────────┤
+│         │                  │                  │                │
+│         ▼                  ▼                  ▼                │
+│  ┌────────────┐    ┌─────────────┐   ┌────────────┐          │
+│  │   OAuth    │    │  DynamoDB   │   │ CloudWatch │          │
+│  │   Lambda   │    │   Users     │   │ Logs/Alarms│          │
+│  └─────┬──────┘    │   Tables    │   └────────────┘          │
+│        │           └─────────────┘                             │
+│        ▼                                                       │
+│  ┌────────────┐           ┌──────────────┐                    │
+│  │  DynamoDB  │           │     SNS      │                    │
+│  │ OAuth State│           │ (Alerts)     │                    │
+│  └────────────┘           └──────────────┘                    │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+                     │
+     ┌───────────────┴───────────────┐
+     │                               │
+     ▼                               ▼
+┌──────────────────┐       ┌──────────────────┐
+│  Strava API      │       │ Avalanche.org    │
+│  - Activities    │       │ API              │
+│  - OAuth         │       │ - Forecasts      │
+└──────────────────┘       └──────────────────┘
 ```
 
 ### Technology Stack
 
-**Language:** TypeScript (Node.js 20+)
+**Language:** TypeScript (Node.js 22+)
 **Infrastructure:** AWS CDK (TypeScript)
 **Runtime:** AWS Lambda (serverless)
 **API Gateway:** AWS API Gateway (HTTP API)
 **Database:** AWS DynamoDB (2 tables)
+**Queue:** AWS SQS (webhook event processing)
+**Monitoring:** AWS CloudWatch (Logs, Metrics, Alarms, Logs Insights)
+**Alerting:** AWS SNS (email notifications)
 **Storage:** Amazon S3 (forecast cache - optional)
 **Build:** esbuild (Lambda bundling)
 **Testing:** Vitest
@@ -97,13 +110,16 @@ avy-forecast-strava-webhook/
         │   └── app.ts         # CDK app entry point
         ├── lib/
         │   └── strava-webhook-stack.ts  # Infrastructure definition
-        └── lambda/
-            ├── webhook.ts     # Webhook event handler
-            ├── oauth.ts       # OAuth flow handlers
-            ├── web.ts         # Landing page
-            ├── strava.ts      # Strava API client
-            ├── db.ts          # DynamoDB access layer
-            └── types.ts       # TypeScript types
+        ├── lambda/
+        │   ├── ingest.ts      # Webhook ingestion (fast reply to Strava)
+        │   ├── processor.ts   # Activity processing (SQS consumer)
+        │   ├── oauth.ts       # OAuth flow handlers
+        │   ├── web.ts         # Landing page
+        │   ├── strava.ts      # Strava API client
+        │   ├── db.ts          # DynamoDB access layer
+        │   └── types.ts       # TypeScript types
+        └── scripts/
+            └── query-logs.sh  # CloudWatch Logs Insights query helper
 ```
 
 ## 3. Components Deep Dive
