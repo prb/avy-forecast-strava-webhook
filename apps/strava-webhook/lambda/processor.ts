@@ -18,20 +18,38 @@ import { getForecastForCoordinate } from '@multifarious/forecast-api';
 import { formatForecast } from '@multifarious/forecast-formatter';
 
 /**
+ * Structured Logger Helper
+ */
+const logger = {
+  info: (event: string, data: Record<string, any> = {}) => {
+    console.log(JSON.stringify({ level: 'INFO', event, ...data }));
+  },
+  error: (event: string, error: any, data: Record<string, any> = {}) => {
+    console.error(
+      JSON.stringify({
+        level: 'ERROR',
+        event,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        ...data,
+      })
+    );
+  },
+};
+
+/**
  * Main Lambda handler for SQS
  */
 export const handler: SQSHandler = async (event: SQSEvent): Promise<void> => {
-  console.log(`Processing ${event.Records.length} records`);
+  logger.info('BatchProcessingStarted', { recordCount: event.Records.length });
 
   for (const record of event.Records) {
     try {
       const webhookEvent: StravaWebhookEvent = JSON.parse(record.body);
       await processWebhookEvent(webhookEvent);
     } catch (error) {
-      console.error('Error processing record:', error);
+      logger.error('RecordProcessingFailed', error, { messageId: record.messageId });
       // Throwing error here will cause SQS to retry this message (visibility timeout)
-      // If you want to skip bad messages, catch and log only.
-      // For now, we throw to ensure retries on transient failures.
       throw error;
     }
   }
@@ -41,14 +59,14 @@ export const handler: SQSHandler = async (event: SQSEvent): Promise<void> => {
  * Process a single webhook event
  */
 async function processWebhookEvent(webhookEvent: StravaWebhookEvent): Promise<void> {
-  console.log('Processing webhook event:', webhookEvent);
+  logger.info('WebhookEventReceived', { webhookEvent });
 
   // Filter: Only process activity creation or update events
   if (
     webhookEvent.object_type !== 'activity' ||
     (webhookEvent.aspect_type !== 'create' && webhookEvent.aspect_type !== 'update')
   ) {
-    console.log('Ignoring non-activity event');
+    logger.info('EventIgnored', { reason: 'Not an activity create/update event' });
     return;
   }
 
@@ -68,14 +86,18 @@ async function processActivity(
   athleteId: number,
   aspectType: 'create' | 'update' | 'delete'
 ): Promise<void> {
-  console.log(`Processing activity ${activityId} for athlete ${athleteId} (${aspectType} event)`);
+  const logContext = { activityId, athleteId, aspectType };
+  logger.info('ActivityProcessingStarted', logContext);
 
   // Get activity details from Strava
   const activity = await getActivity(activityId, athleteId);
 
-  console.log(
-    `Activity type: ${activity.type}, title: "${activity.name}", has location: ${!!activity.start_latlng}`
-  );
+  logger.info('ActivityDetailsFetched', {
+    ...logContext,
+    activityType: activity.type,
+    activityName: activity.name,
+    hasLocation: !!activity.start_latlng,
+  });
 
   // Check for #avy_forecast command in title
   const hasCommand = activity.name.includes('#avy_forecast');
@@ -85,13 +107,13 @@ async function processActivity(
   if (aspectType === 'create' && activity.type === 'BackcountrySki') {
     // Auto-process BackcountrySki activities on creation
     shouldProcess = true;
-    console.log('Auto-processing BackcountrySki activity on creation');
+    logger.info('ProcessingCriteriaMet', { ...logContext, reason: 'Auto-process BackcountrySki' });
   } else if (aspectType === 'update' && hasCommand) {
     // Process any activity with #avy_forecast command on update
     shouldProcess = true;
-    console.log('Processing activity with #avy_forecast command');
+    logger.info('ProcessingCriteriaMet', { ...logContext, reason: 'Manual command #avy_forecast' });
   } else {
-    console.log('Activity does not meet processing criteria, skipping');
+    logger.info('ProcessingSkipped', { ...logContext, reason: 'Criteria not met' });
     return;
   }
 
@@ -101,7 +123,7 @@ async function processActivity(
 
   // Check if activity has start location
   if (!activity.start_latlng || activity.start_latlng.length !== 2) {
-    console.log('Activity has no start location, skipping forecast lookup');
+    logger.info('ProcessingSkipped', { ...logContext, reason: 'No start location' });
 
     // If user manually invoked with #avy_forecast, clean up title and add message
     if (hasCommand) {
@@ -110,7 +132,7 @@ async function processActivity(
         name: newTitle,
         description: (activity.description || '') + '\n\n[No avalanche forecast available: Activity has no location data]',
       };
-      console.log(`Removing #avy_forecast from title: "${activity.name}" -> "${newTitle}"`);
+      logger.info('CleaningUpCommand', { ...logContext, newTitle });
       await updateActivity(activityId, athleteId, updates);
     }
     return;
@@ -125,12 +147,12 @@ async function processActivity(
     /NWAC .* Zone forecast:/.test(currentDescription);
 
   if (hasForecast && !hasCommand) {
-    console.log('Activity description already contains forecast, skipping update');
+    logger.info('ProcessingSkipped', { ...logContext, reason: 'Forecast already present' });
     return;
   }
 
   if (hasForecast && hasCommand) {
-    console.log('Refreshing existing forecast (manual #avy_forecast command)');
+    logger.info('ForecastRefreshTriggered', logContext);
   }
 
   // Extract coordinates and date
@@ -139,7 +161,7 @@ async function processActivity(
   // Falls back to UTC date if start_date_local is missing
   const activityDate = (activity.start_date_local || activity.start_date).split('T')[0];
 
-  console.log(`Looking up forecast for coordinates: ${latitude}, ${longitude} on ${activityDate} (local date)`);
+  logger.info('ForecastLookupStarted', { ...logContext, latitude, longitude, date: activityDate });
 
   // Get avalanche forecast
   const forecastResult = await getForecastForCoordinate(
@@ -158,7 +180,7 @@ async function processActivity(
     newDescription = currentDescription
       .replace(/\n\n[^\n]*https:\/\/nwac\.us\/avalanche-forecast\/#\/forecast\/[^\n]*/g, '')
       .trim();
-    console.log('Removed old forecast from description');
+    logger.info('OldForecastRemoved', logContext);
   }
 
   // Normalize description whitespace before adding new content
@@ -166,13 +188,13 @@ async function processActivity(
   newDescription = newDescription.replace(/\s+$/, '');
 
   if (forecastResult.product) {
-    console.log(`Found forecast for zone: ${forecastResult.zone.name}`);
+    logger.info('ForecastFound', { ...logContext, zoneName: forecastResult.zone.name });
 
     // Format the forecast with colored emoji squares
     const formattedForecast = formatForecast(forecastResult.product);
     newDescription = newDescription + `\n\n${formattedForecast}`;
   } else {
-    console.log(`No forecast available: ${forecastResult.error || 'unknown reason'}`);
+    logger.info('ForecastNotFound', { ...logContext, error: forecastResult.error });
 
     // If using #avy_forecast command, add a message explaining why no forecast was added
     if (hasCommand) {
@@ -193,12 +215,12 @@ async function processActivity(
   if (hasCommand) {
     const newTitle = activity.name.replace(/#avy_forecast/g, '').trim();
     updates.name = newTitle;
-    console.log(`Removing #avy_forecast from title: "${activity.name}" -> "${newTitle}"`);
+    logger.info('RemovingCommandFromTitle', { ...logContext, newTitle });
   }
 
-  console.log(`Updating activity ${activityId}`);
+  logger.info('UpdatingActivity', logContext);
 
   await updateActivity(activityId, athleteId, updates);
 
-  console.log(`Successfully updated activity ${activityId}`);
+  logger.info('ActivityProcessed', { ...logContext, success: true });
 }

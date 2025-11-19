@@ -4,6 +4,9 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as sns from 'aws-cdk-lib/aws-sns';
+import * as subs from 'aws-cdk-lib/aws-sns-subscriptions';
+import * as cloudwatch from 'aws-cdk-lib/aws-cloudwatch';
 import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import { Construct } from 'constructs';
 
@@ -217,6 +220,82 @@ export class StravaWebhookStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'TableName', {
       value: usersTable.tableName,
       description: 'DynamoDB table name for user tokens',
+    });
+
+    // ============================================
+    // Observability: Alarms & Insights
+    // ============================================
+
+    // 1. SNS Topic for Alerts
+    const alarmTopic = new sns.Topic(this, 'AlarmTopic', {
+      displayName: 'Strava Webhook Alerts',
+    });
+
+    // Add email subscription
+    const alertEmail = `avywebhook-${environment}@mult.ifario.us`;
+    alarmTopic.addSubscription(new subs.EmailSubscription(alertEmail));
+
+    new cdk.CfnOutput(this, 'AlarmTopicArn', {
+      value: alarmTopic.topicArn,
+      description: 'SNS Topic for critical alerts',
+    });
+
+    new cdk.CfnOutput(this, 'AlertEmail', {
+      value: alertEmail,
+      description: 'Email address subscribed to alerts',
+    });
+
+    // 2. Metric Filter for Errors
+    // Counts log events with { $.level = "ERROR" }
+    const errorMetricFilter = processorFunction.logGroup.addMetricFilter('ErrorCountFilter', {
+      metricNamespace: 'StravaWebhook',
+      metricName: 'ProcessingErrors',
+      filterPattern: logs.FilterPattern.stringValue('$.level', '=', 'ERROR'),
+      metricValue: '1',
+    });
+
+    // 3. CloudWatch Alarm
+    // Trigger if >= 1 error in 5 minutes
+    const errorAlarm = new cloudwatch.Alarm(this, 'ProcessingErrorAlarm', {
+      metric: errorMetricFilter.metric({
+        period: cdk.Duration.minutes(5),
+        statistic: 'Sum',
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      alarmDescription: 'Alerts when the Processor Lambda logs an error',
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    errorAlarm.addAlarmAction(new cdk.aws_cloudwatch_actions.SnsAction(alarmTopic));
+
+    // 4. CloudWatch Logs Insights Saved Queries
+    // Monthly Active Users
+    new logs.CfnQueryDefinition(this, 'QueryMAU', {
+      name: 'StravaWebhook/MonthlyActiveUsers',
+      queryString: `fields athleteId
+| filter event = "ActivityProcessed"
+| stats count_distinct(athleteId) as UniqueAthletes by bin(1d)`,
+      logGroupNames: [processorFunction.logGroup.logGroupName],
+    });
+
+    // Total Processed
+    new logs.CfnQueryDefinition(this, 'QueryTotalProcessed', {
+      name: 'StravaWebhook/TotalProcessed',
+      queryString: `fields @timestamp, athleteId, activityId
+| filter event = "ActivityProcessed"
+| sort @timestamp desc`,
+      logGroupNames: [processorFunction.logGroup.logGroupName],
+    });
+
+    // Forecast Failures
+    new logs.CfnQueryDefinition(this, 'QueryFailures', {
+      name: 'StravaWebhook/ForecastFailures',
+      queryString: `fields @timestamp, error, athleteId
+| filter level = "ERROR"
+| sort @timestamp desc`,
+      logGroupNames: [processorFunction.logGroup.logGroupName],
     });
   }
 }
