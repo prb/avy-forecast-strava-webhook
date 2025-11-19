@@ -9,6 +9,8 @@ When you upload a BackcountrySki activity to Strava, this system automatically:
 2. Fetches the relevant NWAC avalanche forecast
 3. Appends formatted forecast data to your activity description
 
+**Manual Trigger**: Add `#avy_forecast` to any activity title to manually request a forecast.
+
 **Example output:**
 ```
 NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)
@@ -66,4 +68,4 @@ This is a TypeScript monorepo with three main components:
 
 ## License
 
-MIT
+[CC0 1.0 Universal](LICENSE) - Public Domain Dedication
