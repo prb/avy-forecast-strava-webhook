@@ -14,6 +14,12 @@ export class StravaWebhookStack extends cdk.Stack {
     // ============================================
     // DynamoDB Table for User Tokens
     // ============================================
+    const environment = this.node.tryGetContext('environment') || 'dev';
+    const isProd = environment === 'prod';
+    const removalPolicy = isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY;
+
+    console.log(`Environment: ${environment}, Removal Policy: ${isProd ? 'RETAIN' : 'DESTROY'}`);
+
     const usersTable = new dynamodb.Table(this, 'StravaUsersTable', {
       partitionKey: {
         name: 'athlete_id',
@@ -21,7 +27,7 @@ export class StravaWebhookStack extends cdk.Stack {
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST, // On-demand pricing
       encryption: dynamodb.TableEncryption.AWS_MANAGED, // Encrypt at rest
-      removalPolicy: cdk.RemovalPolicy.RETAIN, // Don't delete table on stack deletion
+      removalPolicy: removalPolicy,
       pointInTimeRecovery: true, // Enable backups
       tableName: 'strava-avy-users',
     });
