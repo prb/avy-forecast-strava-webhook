@@ -7,6 +7,7 @@
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import * as crypto from 'crypto';
 
 const sqs = new SQSClient({});
 
@@ -94,6 +95,24 @@ async function handleWebhookIngest(
     };
   }
 
+  // 1. Verify X-Strava-Signature
+  const signature = event.headers['X-Strava-Signature'] || event.headers['x-strava-signature'];
+  if (!signature) {
+    console.error('Missing X-Strava-Signature header');
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ error: 'Missing signature' }),
+    };
+  }
+
+  if (!verifySignature(signature, event.body)) {
+    console.error('Invalid X-Strava-Signature');
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ error: 'Invalid signature' }),
+    };
+  }
+
   // Validate JSON parsing
   let webhookEvent;
   try {
@@ -106,6 +125,33 @@ async function handleWebhookIngest(
   }
 
   console.log('Ingesting webhook event:', webhookEvent);
+
+  // 2. Filter events early
+  // We only care about 'activity' objects and 'create' or 'update' aspects
+  if (webhookEvent.object_type !== 'activity') {
+    console.log('Ignoring non-activity event:', webhookEvent.object_type);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: 'Event ignored (not an activity)' }),
+    };
+  }
+
+  if (webhookEvent.aspect_type === 'delete') {
+    console.log('Ignoring delete event');
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: 'Event ignored (delete)' }),
+    };
+  }
+
+  // Also double check it is create or update, just in case
+  if (webhookEvent.aspect_type !== 'create' && webhookEvent.aspect_type !== 'update') {
+    console.log('Ignoring unknown aspect type:', webhookEvent.aspect_type);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ message: 'Event ignored (unknown aspect)' }),
+    };
+  }
 
   try {
     // Send to SQS
@@ -128,4 +174,21 @@ async function handleWebhookIngest(
       body: JSON.stringify({ error: 'Failed to queue event' }),
     };
   }
+}
+
+/**
+ * Verify Strava HMAC SHA256 signature
+ */
+function verifySignature(signature: string, payload: string): boolean {
+  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+  if (!clientSecret) {
+    console.error('STRAVA_CLIENT_SECRET not configured');
+    return false;
+  }
+
+  const hmac = crypto.createHmac('sha256', clientSecret);
+  hmac.update(payload);
+  const expectedSignature = hmac.digest('hex');
+
+  return signature === expectedSignature;
 }
