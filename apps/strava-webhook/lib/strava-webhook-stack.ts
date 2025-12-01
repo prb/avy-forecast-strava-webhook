@@ -31,7 +31,7 @@ export class StravaWebhookStack extends cdk.Stack {
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST, // On-demand pricing
       encryption: dynamodb.TableEncryption.AWS_MANAGED, // Encrypt at rest
       removalPolicy: removalPolicy,
-      pointInTimeRecovery: true, // Enable backups
+      // pointInTimeRecovery: true, // TODO: Use pointInTimeRecoverySpecification when available/clear
       tableName: 'strava-avy-users',
     });
 
@@ -73,14 +73,25 @@ export class StravaWebhookStack extends cdk.Stack {
     // ============================================
     // Lambda Function: Ingest Handler (API Gateway -> SQS)
     // ============================================
+    // ============================================
+    // Lambda Function: Ingest Handler (API Gateway -> SQS)
+    // ============================================
+    const ingestFunctionName = `StravaWebhookIngest-${environment}`;
+
+    new logs.LogGroup(this, 'IngestLogGroup', {
+      logGroupName: `/aws/lambda/${ingestFunctionName}`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: removalPolicy,
+    });
+
     const ingestFunction = new lambda.Function(this, 'IngestHandler', {
+      functionName: ingestFunctionName,
       runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'ingest.handler',
       code: lambda.Code.fromAsset('dist/lambda'),
       timeout: cdk.Duration.seconds(3), // Fast response required
       memorySize: 128,
       environment: commonEnvironment,
-      logRetention: logs.RetentionDays.ONE_WEEK,
       description: 'Ingests Strava webhook events and pushes to SQS',
     });
 
@@ -90,14 +101,22 @@ export class StravaWebhookStack extends cdk.Stack {
     // ============================================
     // Lambda Function: Processor Handler (SQS -> Logic)
     // ============================================
+    const processorFunctionName = `StravaWebhookProcessor-${environment}`;
+
+    new logs.LogGroup(this, 'ProcessorLogGroup', {
+      logGroupName: `/aws/lambda/${processorFunctionName}`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: removalPolicy,
+    });
+
     const processorFunction = new lambda.Function(this, 'ProcessorHandler', {
+      functionName: processorFunctionName,
       runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'processor.handler',
       code: lambda.Code.fromAsset('dist/lambda'),
       timeout: cdk.Duration.seconds(30),
       memorySize: 512,
       environment: commonEnvironment,
-      logRetention: logs.RetentionDays.ONE_WEEK,
       description: 'Processes Strava webhook events from SQS',
     });
 
@@ -112,14 +131,22 @@ export class StravaWebhookStack extends cdk.Stack {
     // ============================================
     // Lambda Function: OAuth Flow
     // ============================================
+    const oauthFunctionName = `StravaWebhookOAuth-${environment}`;
+
+    new logs.LogGroup(this, 'OAuthLogGroup', {
+      logGroupName: `/aws/lambda/${oauthFunctionName}`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: removalPolicy,
+    });
+
     const oauthFunction = new lambda.Function(this, 'OAuthHandler', {
+      functionName: oauthFunctionName,
       runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'oauth.handler',
       code: lambda.Code.fromAsset('dist/lambda'),
       timeout: cdk.Duration.seconds(10),
       memorySize: 256,
       environment: commonEnvironment,
-      logRetention: logs.RetentionDays.ONE_WEEK,
       description: 'Handles Strava OAuth authorization flow',
     });
 
@@ -130,14 +157,22 @@ export class StravaWebhookStack extends cdk.Stack {
     // ============================================
     // Lambda Function: Web UI
     // ============================================
+    const webFunctionName = `StravaWebhookWeb-${environment}`;
+
+    new logs.LogGroup(this, 'WebLogGroup', {
+      logGroupName: `/aws/lambda/${webFunctionName}`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: removalPolicy,
+    });
+
     const webFunction = new lambda.Function(this, 'WebHandler', {
+      functionName: webFunctionName,
       runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'web.handler',
       code: lambda.Code.fromAsset('dist/lambda'),
       timeout: cdk.Duration.seconds(5),
       memorySize: 128,
       environment: commonEnvironment,
-      logRetention: logs.RetentionDays.ONE_WEEK,
       description: 'Serves simple web UI for user onboarding',
     });
 

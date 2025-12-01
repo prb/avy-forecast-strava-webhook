@@ -5,8 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc && npm run bundle && npm run copy-zones",
-    "bundle": "esbuild lambda/ingest.ts lambda/processor.ts lambda/oauth.ts lambda/web.ts --bundle --platform=node --target=node22 --outdir=dist/lambda --external:@aws-sdk/* --format=cjs",
+    "build": "rm -rf dist && tsc && npm run bundle && rm -f dist/lambda/*.js && npm run copy-zones",
+    "bundle": "esbuild lambda/ingest.ts lambda/processor.ts lambda/oauth.ts lambda/web.ts --bundle --platform=node --target=node22 --outdir=dist/lambda --external:@aws-sdk/* --format=esm --out-extension:.js=.mjs",
     "copy-zones": "mkdir -p dist/lambda/data/zones && cp ../../packages/forecast-api/data/zones/*.geojson dist/lambda/data/zones/",
     "watch": "tsc -w",
     "test": "vitest",
