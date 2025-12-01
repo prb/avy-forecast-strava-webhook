@@ -10,7 +10,12 @@ import { ZONE_CONFIGS } from './config.js';
 // Get the directory of this module (for loading data files)
 // Handle both ESM and CommonJS (when bundled by esbuild)
 function getDataDir(): string {
-  // In Lambda/bundled environment, check for zone files in current directory first
+  // In Lambda environment, use LAMBDA_TASK_ROOT
+  if (process.env.LAMBDA_TASK_ROOT) {
+    return join(process.env.LAMBDA_TASK_ROOT, 'data/zones');
+  }
+
+  // In Lambda/bundled environment (fallback), check for zone files in current directory first
   // This handles the case where zone files are copied alongside the bundle
   const bundledPath = join(process.cwd(), 'data/zones');
 
