@@ -36,3 +36,6 @@ coverage/
 # CDK
 cdk.out/
 cdk.context.json
+
+# Avoid checking in files with secrets.
+*.secrets
