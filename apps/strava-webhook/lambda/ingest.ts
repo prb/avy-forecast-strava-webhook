@@ -1,10 +1,3 @@
-/**
- * Strava Webhook Ingest Lambda
- *
- * Receives webhook events from Strava, validates them, and pushes to SQS.
- * Returns 200 OK immediately to prevent Strava timeouts.
- */
-
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import * as crypto from 'crypto';

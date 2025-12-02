@@ -1,4 +1,5 @@
 import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
@@ -10,18 +11,46 @@ import { ZONE_CONFIGS } from './config.js';
 // Get the directory of this module (for loading data files)
 // Handle both ESM and CommonJS (when bundled by esbuild)
 function getDataDir(): string {
-  // In Lambda/bundled environment, check for zone files in current directory first
-  // This handles the case where zone files are copied alongside the bundle
-  const bundledPath = join(process.cwd(), 'data/zones');
+  const candidates: string[] = [];
 
-  // In development/ESM, use import.meta.url
+  // 1. Lambda environment (explicit)
+  if (process.env.LAMBDA_TASK_ROOT) {
+    candidates.push(join(process.env.LAMBDA_TASK_ROOT, 'data/zones'));
+  }
+
+  // 2. Bundled environment (current working directory)
+  // In Lambda, cwd is usually /var/task
+  candidates.push(join(process.cwd(), 'data/zones'));
+
+  // 3. Bundled ESM environment (sibling directory)
+  // When bundled, data/ is often next to the script
   try {
     const moduleDirname = dirname(fileURLToPath(import.meta.url));
-    return join(moduleDirname, '../../data/zones');
+    candidates.push(join(moduleDirname, 'data/zones'));
   } catch {
-    // CommonJS fallback - return bundled path
-    return bundledPath;
+    // Ignore
   }
+
+  // 4. Development/Source environment (relative to module)
+  try {
+    const moduleDirname = dirname(fileURLToPath(import.meta.url));
+    candidates.push(join(moduleDirname, '../../data/zones'));
+  } catch {
+    // Ignore error if import.meta.url is not available
+  }
+
+  // Return the first candidate that exists
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      console.log(`[ZoneLoader] Found zones directory at: ${path}`);
+      return path;
+    }
+  }
+
+  // Fallback (useful for debugging if nothing found)
+  const fallback = join(process.cwd(), 'data/zones');
+  console.warn(`[ZoneLoader] Could not find zones directory in candidates: ${JSON.stringify(candidates)}. Defaulting to ${fallback}`);
+  return fallback;
 }
 
 const DATA_DIR = getDataDir();
