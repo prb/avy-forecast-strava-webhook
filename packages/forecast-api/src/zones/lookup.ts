@@ -22,7 +22,16 @@ function getDataDir(): string {
   // In Lambda, cwd is usually /var/task
   candidates.push(join(process.cwd(), 'data/zones'));
 
-  // 3. Development/Source environment (relative to module)
+  // 3. Bundled ESM environment (sibling directory)
+  // When bundled, data/ is often next to the script
+  try {
+    const moduleDirname = dirname(fileURLToPath(import.meta.url));
+    candidates.push(join(moduleDirname, 'data/zones'));
+  } catch {
+    // Ignore
+  }
+
+  // 4. Development/Source environment (relative to module)
   try {
     const moduleDirname = dirname(fileURLToPath(import.meta.url));
     candidates.push(join(moduleDirname, '../../data/zones'));
