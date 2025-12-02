@@ -80,8 +80,10 @@ describe('Avalanche.org API Client', () => {
 
       // All should be forecast type
       forecasts.forEach(f => {
+        // console.log('Avalanche Center:', f.avalanche_center);
         expect(f.product_type).toBe('forecast');
-        expect(f.avalanche_center.id).toBe('NWAC');
+        // expect(f.avalanche_center.id).toBe('NWAC');
+        expect(f.avalanche_center.name).toBe('Northwest Avalanche Center');
       });
     }, 10000);
 
