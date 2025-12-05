@@ -171,7 +171,7 @@ describe('Webhook Handler', () => {
       const updateCall = vi.mocked(strava.updateActivity).mock.calls[0];
       const updates = updateCall[2];
       expect(updates.description).toBe(
-        `Great day on Mt Hood!\n\n${expectedMtHoodForecastText}`
+        `Great day on Mt Hood!\n\n${expectedMtHoodForecastText}\n\nPowered by Strava`
       );
     });
 

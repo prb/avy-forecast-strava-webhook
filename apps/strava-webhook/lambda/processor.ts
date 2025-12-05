@@ -192,7 +192,7 @@ async function processActivity(
 
     // Format the forecast with colored emoji squares
     const formattedForecast = formatForecast(forecastResult.product);
-    newDescription = newDescription + `\n\n${formattedForecast}`;
+    newDescription = newDescription + `\n\n${formattedForecast}\n\nPowered by Strava`;
   } else {
     logger.info('ForecastNotFound', { ...logContext, error: forecastResult.error });
 
