@@ -163,9 +163,10 @@ export const ZONE_CONFIGS: ZoneConfig[] = [
     "id": 3001,
     "zone_id": "front-range",
     "name": "Front Range",
-    "filename": "CAIC-front-range.geojson",
-    "center_id": "CAIC"
+    filename: 'CAIC-front-range.geojson',
+    center_id: 'CAIC'
   },
+  // ID 3002 (Grand Mesa) omitted due to download failure (404)
   {
     "id": 3003,
     "zone_id": "gunnison",
