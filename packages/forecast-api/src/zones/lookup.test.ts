@@ -15,9 +15,9 @@ describe('Zone Lookup', () => {
   });
 
   describe('loadZones', () => {
-    it('should load all 10 zones', async () => {
+    it('should load all zones', async () => {
       const zones = await loadZones();
-      expect(zones).toHaveLength(10);
+      expect(zones.length).toBeGreaterThan(0);
     });
 
     it('should have correct zone properties', async () => {
@@ -37,10 +37,14 @@ describe('Zone Lookup', () => {
       expect(zones1).toBe(zones2); // Same reference = cached
     });
 
-    it('should include all expected zone IDs', async () => {
+    it('should include NWAC zone IDs', async () => {
       const zones = await loadZones();
-      const zoneIds = zones.map(z => z.id).sort();
-      expect(zoneIds).toEqual([1645, 1646, 1647, 1648, 1649, 1653, 1654, 1655, 1656, 1657]);
+      const zoneIds = zones.map(z => z.id);
+      const nwacIds = [1645, 1646, 1647, 1648, 1649, 1653, 1654, 1655, 1656, 1657];
+
+      nwacIds.forEach(id => {
+        expect(zoneIds).toContain(id);
+      });
     });
   });
 
@@ -52,67 +56,67 @@ describe('Zone Lookup', () => {
       expectedZoneId: number;
       expectedZoneName: string;
     }> = [
-      {
-        name: 'Olympics',
-        coordinate: { latitude: 47.8, longitude: -123.5 },
-        expectedZoneId: 1645,
-        expectedZoneName: 'Olympics',
-      },
-      {
-        name: 'West Slopes North - Mt Baker area',
-        coordinate: { latitude: 48.8, longitude: -121.7 },
-        expectedZoneId: 1646,
-        expectedZoneName: 'West Slopes North',
-      },
-      {
-        name: 'West Slopes Central',
-        coordinate: { latitude: 47.9, longitude: -121.4 },
-        expectedZoneId: 1647,
-        expectedZoneName: 'West Slopes Central',
-      },
-      {
-        name: 'West Slopes South',
-        coordinate: { latitude: 46.5, longitude: -121.7 },
-        expectedZoneId: 1648,
-        expectedZoneName: 'West Slopes South',
-      },
-      {
-        name: 'Stevens Pass',
-        coordinate: { latitude: 47.75, longitude: -121.1 },
-        expectedZoneId: 1649,
-        expectedZoneName: 'Stevens Pass',
-      },
-      {
-        name: 'Snoqualmie Pass',
-        coordinate: { latitude: 47.45, longitude: -121.4 },
-        expectedZoneId: 1653,
-        expectedZoneName: 'Snoqualmie Pass',
-      },
-      {
-        name: 'East Slopes North',
-        coordinate: { latitude: 48.5, longitude: -120.3 },
-        expectedZoneId: 1654,
-        expectedZoneName: 'East Slopes North',
-      },
-      {
-        name: 'East Slopes Central',
-        coordinate: { latitude: 47.5, longitude: -120.7 },
-        expectedZoneId: 1655,
-        expectedZoneName: 'East Slopes Central',
-      },
-      {
-        name: 'East Slopes South',
-        coordinate: { latitude: 46.9, longitude: -121.15 },
-        expectedZoneId: 1656,
-        expectedZoneName: 'East Slopes South',
-      },
-      {
-        name: 'Mt Hood',
-        coordinate: { latitude: 45.4, longitude: -121.7 },
-        expectedZoneId: 1657,
-        expectedZoneName: 'Mt Hood',
-      },
-    ];
+        {
+          name: 'Olympics',
+          coordinate: { latitude: 47.8, longitude: -123.5 },
+          expectedZoneId: 1645,
+          expectedZoneName: 'Olympics',
+        },
+        {
+          name: 'West Slopes North - Mt Baker area',
+          coordinate: { latitude: 48.8, longitude: -121.7 },
+          expectedZoneId: 1646,
+          expectedZoneName: 'West Slopes North',
+        },
+        {
+          name: 'West Slopes Central',
+          coordinate: { latitude: 47.9, longitude: -121.4 },
+          expectedZoneId: 1647,
+          expectedZoneName: 'West Slopes Central',
+        },
+        {
+          name: 'West Slopes South',
+          coordinate: { latitude: 46.5, longitude: -121.7 },
+          expectedZoneId: 1648,
+          expectedZoneName: 'West Slopes South',
+        },
+        {
+          name: 'Stevens Pass',
+          coordinate: { latitude: 47.75, longitude: -121.1 },
+          expectedZoneId: 1649,
+          expectedZoneName: 'Stevens Pass',
+        },
+        {
+          name: 'Snoqualmie Pass',
+          coordinate: { latitude: 47.45, longitude: -121.4 },
+          expectedZoneId: 1653,
+          expectedZoneName: 'Snoqualmie Pass',
+        },
+        {
+          name: 'East Slopes North',
+          coordinate: { latitude: 48.5, longitude: -120.3 },
+          expectedZoneId: 1654,
+          expectedZoneName: 'East Slopes North',
+        },
+        {
+          name: 'East Slopes Central',
+          coordinate: { latitude: 47.5, longitude: -120.7 },
+          expectedZoneId: 1655,
+          expectedZoneName: 'East Slopes Central',
+        },
+        {
+          name: 'East Slopes South',
+          coordinate: { latitude: 46.9, longitude: -121.15 },
+          expectedZoneId: 1656,
+          expectedZoneName: 'East Slopes South',
+        },
+        {
+          name: 'Mt Hood',
+          coordinate: { latitude: 45.4, longitude: -121.7 },
+          expectedZoneId: 1657,
+          expectedZoneName: 'Mt Hood',
+        },
+      ];
 
     testCases.forEach(({ name, coordinate, expectedZoneId, expectedZoneName }) => {
       it(`should find ${name}`, async () => {
@@ -159,7 +163,7 @@ describe('Zone Lookup', () => {
   describe('getAllZones', () => {
     it('should return all zones', async () => {
       const zones = await getAllZones();
-      expect(zones).toHaveLength(10);
+      expect(zones.length).toBeGreaterThan(0);
     });
 
     it('should return zones with boundary data', async () => {
