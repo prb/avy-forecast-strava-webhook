@@ -2,6 +2,12 @@
 node_modules/
 package-lock.json
 
+# Temporary data
+packages/forecast-api/data/zones/tmp/
+
+# Generated preview
+landing-page-preview.html
+
 # Build output
 dist/
 *.tsbuildinfo
