@@ -1,11 +1,13 @@
-
-import { handler } from '../dist/lambda/web.mjs';
+// @ts-ignore
+import { handler as untypedHandler } from '../dist/lambda/web.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 
+const handler = untypedHandler as (event: APIGatewayProxyEvent) => Promise<APIGatewayProxyResult>;
 
 // Mock APIGatewayProxyEvent
-const mockEvent: any = {};
+const mockEvent = {} as APIGatewayProxyEvent;
 
 async function generatePreview() {
     console.log('Generating landing page preview...');
