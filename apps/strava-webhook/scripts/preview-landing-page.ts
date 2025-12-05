@@ -2,7 +2,7 @@
 import { handler } from '../dist/lambda/web.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+
 
 // Mock APIGatewayProxyEvent
 const mockEvent: any = {};
