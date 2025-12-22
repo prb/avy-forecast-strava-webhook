@@ -6,7 +6,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { handler } from '../ingest.js';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import * as crypto from 'crypto';
 
 // Mock SQS Client
 vi.mock('@aws-sdk/client-sqs', () => {
@@ -21,20 +20,12 @@ vi.mock('@aws-sdk/client-sqs', () => {
 });
 
 describe('Ingest Handler', () => {
-    const CLIENT_SECRET = 'test_client_secret';
 
     beforeEach(() => {
         vi.clearAllMocks();
         process.env.STRAVA_VERIFY_TOKEN = 'test_token';
-        process.env.STRAVA_CLIENT_SECRET = CLIENT_SECRET;
         process.env.QUEUE_URL = 'https://sqs.us-west-2.amazonaws.com/123456789012/test-queue';
     });
-
-    function sign(payload: any): string {
-        const hmac = crypto.createHmac('sha256', CLIENT_SECRET);
-        hmac.update(JSON.stringify(payload));
-        return hmac.digest('hex');
-    }
 
     describe('GET request (verification)', () => {
         it('should verify webhook subscription with correct token', async () => {
@@ -97,9 +88,7 @@ describe('Ingest Handler', () => {
             const event: APIGatewayProxyEvent = {
                 httpMethod: 'POST',
                 body: JSON.stringify(eventBody),
-                headers: {
-                    'X-Strava-Signature': sign(eventBody),
-                },
+                headers: {},
             } as any;
 
             // Mock SQS send success
@@ -116,48 +105,6 @@ describe('Ingest Handler', () => {
             expect(sqsMock).toHaveBeenCalled();
         });
 
-        it('should reject missing signature', async () => {
-            const eventBody = {
-                object_type: 'activity',
-                object_id: 12345,
-                aspect_type: 'create',
-            };
-
-            const event: APIGatewayProxyEvent = {
-                httpMethod: 'POST',
-                body: JSON.stringify(eventBody),
-                headers: {}, // No signature
-            } as any;
-
-            const result = await handler(event);
-
-            expect(result.statusCode).toBe(403);
-            const body = JSON.parse(result.body);
-            expect(body.error).toBe('Missing signature');
-        });
-
-        it('should reject invalid signature', async () => {
-            const eventBody = {
-                object_type: 'activity',
-                object_id: 12345,
-                aspect_type: 'create',
-            };
-
-            const event: APIGatewayProxyEvent = {
-                httpMethod: 'POST',
-                body: JSON.stringify(eventBody),
-                headers: {
-                    'X-Strava-Signature': 'invalid_signature',
-                },
-            } as any;
-
-            const result = await handler(event);
-
-            expect(result.statusCode).toBe(403);
-            const body = JSON.parse(result.body);
-            expect(body.error).toBe('Invalid signature');
-        });
-
         it('should ignore delete events (return 200 but not queue)', async () => {
             const eventBody = {
                 object_type: 'activity',
@@ -168,9 +115,7 @@ describe('Ingest Handler', () => {
             const event: APIGatewayProxyEvent = {
                 httpMethod: 'POST',
                 body: JSON.stringify(eventBody),
-                headers: {
-                    'X-Strava-Signature': sign(eventBody),
-                },
+                headers: {},
             } as any;
 
             const sqsMock = (SQSClient as any)().send;
@@ -193,9 +138,7 @@ describe('Ingest Handler', () => {
             const event: APIGatewayProxyEvent = {
                 httpMethod: 'POST',
                 body: JSON.stringify(eventBody),
-                headers: {
-                    'X-Strava-Signature': sign(eventBody),
-                },
+                headers: {},
             } as any;
 
             const sqsMock = (SQSClient as any)().send;
@@ -218,9 +161,7 @@ describe('Ingest Handler', () => {
             const event: APIGatewayProxyEvent = {
                 httpMethod: 'POST',
                 body: JSON.stringify(eventBody),
-                headers: {
-                    'X-Strava-Signature': sign(eventBody),
-                },
+                headers: {},
             } as any;
 
             // Mock SQS send failure

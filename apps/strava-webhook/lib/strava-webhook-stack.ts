@@ -182,6 +182,9 @@ export class StravaWebhookStack extends cdk.Stack {
     const api = new apigateway.RestApi(this, 'StravaWebhookApi', {
       restApiName: 'Strava Avalanche Forecast Service',
       description: 'API for Strava webhook and OAuth flow',
+      endpointConfiguration: {
+        types: [apigateway.EndpointType.REGIONAL],
+      },
       deployOptions: {
         stageName: 'prod',
         loggingLevel: apigateway.MethodLoggingLevel.OFF, // Disable logging to avoid CloudWatch role requirement

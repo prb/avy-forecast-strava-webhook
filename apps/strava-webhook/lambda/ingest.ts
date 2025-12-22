@@ -1,6 +1,5 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
-import * as crypto from 'crypto';
 
 const sqs = new SQSClient({});
 
@@ -88,24 +87,6 @@ async function handleWebhookIngest(
     };
   }
 
-  // 1. Verify X-Strava-Signature
-  const signature = event.headers['X-Strava-Signature'] || event.headers['x-strava-signature'];
-  if (!signature) {
-    console.error('Missing X-Strava-Signature header');
-    return {
-      statusCode: 403,
-      body: JSON.stringify({ error: 'Missing signature' }),
-    };
-  }
-
-  if (!verifySignature(signature, event.body)) {
-    console.error('Invalid X-Strava-Signature');
-    return {
-      statusCode: 403,
-      body: JSON.stringify({ error: 'Invalid signature' }),
-    };
-  }
-
   // Validate JSON parsing
   let webhookEvent;
   try {
@@ -169,19 +150,3 @@ async function handleWebhookIngest(
   }
 }
 
-/**
- * Verify Strava HMAC SHA256 signature
- */
-function verifySignature(signature: string, payload: string): boolean {
-  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
-  if (!clientSecret) {
-    console.error('STRAVA_CLIENT_SECRET not configured');
-    return false;
-  }
-
-  const hmac = crypto.createHmac('sha256', clientSecret);
-  hmac.update(payload);
-  const expectedSignature = hmac.digest('hex');
-
-  return signature === expectedSignature;
-}
