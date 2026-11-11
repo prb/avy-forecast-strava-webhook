@@ -1,4 +1,4 @@
-import type { Feature, Polygon } from 'geojson';
+import type { Feature, Polygon, MultiPolygon } from 'geojson';
 
 /**
  * NWAC Zone information from avalanche.org API
@@ -74,7 +74,7 @@ export interface ForecastProduct {
 /**
  * Zone boundary GeoJSON feature
  */
-export interface ZoneBoundary extends Feature<Polygon> {
+export interface ZoneBoundary extends Feature<Polygon | MultiPolygon> {
   properties: {
     title: string;
     description?: string;
