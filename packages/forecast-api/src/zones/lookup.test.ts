@@ -6,6 +6,7 @@ import {
   getZoneById,
   getAllZones,
 } from './lookup.js';
+import { ZONE_CONFIGS } from './config.js';
 import type { Coordinate } from '../types/index.js';
 
 describe('Zone Lookup', () => {
@@ -17,7 +18,8 @@ describe('Zone Lookup', () => {
   describe('loadZones', () => {
     it('should load all zones', async () => {
       const zones = await loadZones();
-      expect(zones.length).toBeGreaterThan(0);
+      expect(zones.length).toBe(ZONE_CONFIGS.length);
+      expect(zones.length).toBe(28);
     });
 
     it('should have correct zone properties', async () => {
@@ -28,7 +30,24 @@ describe('Zone Lookup', () => {
       expect(firstZone).toHaveProperty('zone_id');
       expect(firstZone).toHaveProperty('name');
       expect(firstZone).toHaveProperty('boundary');
-      expect(firstZone.boundary.geometry.type).toBe('Polygon');
+      expect(['Polygon', 'MultiPolygon']).toContain(firstZone.boundary.geometry.type);
+    });
+
+    it('should load MultiPolygon zones without error', async () => {
+      const zones = await loadZones();
+      const multiPolygonZones = zones.filter(z => z.boundary.geometry.type === 'MultiPolygon');
+      expect(multiPolygonZones.length).toBe(10);
+
+      // Verify specific CAIC MultiPolygon zone (Front Range = 3001) and UAC MultiPolygon (Southwest = 2007)
+      const frontRange = zones.find(z => z.id === 3001);
+      expect(frontRange).toBeDefined();
+      expect(frontRange?.name).toBe('Front Range');
+      expect(frontRange?.boundary.geometry.type).toBe('MultiPolygon');
+
+      const uacSouthwest = zones.find(z => z.id === 2007);
+      expect(uacSouthwest).toBeDefined();
+      expect(uacSouthwest?.name).toBe('Southwest');
+      expect(uacSouthwest?.boundary.geometry.type).toBe('MultiPolygon');
     });
 
     it('should cache zones on subsequent calls', async () => {
@@ -116,6 +135,38 @@ describe('Zone Lookup', () => {
           expectedZoneId: 1657,
           expectedZoneName: 'Mt Hood',
         },
+        // Colorado (CAIC) MultiPolygon zones
+        {
+          name: 'CAIC Front Range (Berthoud Pass)',
+          coordinate: { latitude: 39.798, longitude: -105.777 },
+          expectedZoneId: 3001,
+          expectedZoneName: 'Front Range',
+        },
+        {
+          name: 'CAIC Aspen (Aspen Highlands)',
+          coordinate: { latitude: 39.182, longitude: -106.855 },
+          expectedZoneId: 3000,
+          expectedZoneName: 'Aspen',
+        },
+        {
+          name: 'CAIC Vail & Summit County (Breckenridge)',
+          coordinate: { latitude: 39.481, longitude: -106.038 },
+          expectedZoneId: 3009,
+          expectedZoneName: 'Vail & Summit County',
+        },
+        // Utah (UAC) zones
+        {
+          name: 'UAC Southwest (MultiPolygon)',
+          coordinate: { latitude: 38.275, longitude: -112.481 },
+          expectedZoneId: 2007,
+          expectedZoneName: 'Southwest',
+        },
+        {
+          name: 'UAC Salt Lake (Alta)',
+          coordinate: { latitude: 40.588, longitude: -111.638 },
+          expectedZoneId: 2005,
+          expectedZoneName: 'Salt Lake',
+        },
       ];
 
     testCases.forEach(({ name, coordinate, expectedZoneId, expectedZoneName }) => {
@@ -168,9 +219,10 @@ describe('Zone Lookup', () => {
 
     it('should return zones with boundary data', async () => {
       const zones = await getAllZones();
+      expect(zones.length).toBe(ZONE_CONFIGS.length);
       zones.forEach(zone => {
         expect(zone.boundary).toBeDefined();
-        expect(zone.boundary.geometry.type).toBe('Polygon');
+        expect(['Polygon', 'MultiPolygon']).toContain(zone.boundary.geometry.type);
         expect(zone.boundary.geometry.coordinates).toBeDefined();
         expect(zone.boundary.geometry.coordinates.length).toBeGreaterThan(0);
       });

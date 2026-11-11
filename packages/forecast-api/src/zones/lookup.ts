@@ -4,8 +4,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import { point } from '@turf/helpers';
-import type { FeatureCollection, Polygon } from 'geojson';
-import type { Coordinate, ZoneWithBoundary } from '../types/index.js';
+import type { FeatureCollection, Polygon, MultiPolygon } from 'geojson';
+import type { Coordinate, ZoneWithBoundary, ZoneBoundary } from '../types/index.js';
 import { ZONE_CONFIGS } from './config.js';
 
 // Get the directory of this module (for loading data files)
@@ -75,7 +75,7 @@ export async function loadZones(): Promise<ZoneWithBoundary[]> {
 
     try {
       const content = await readFile(filePath, 'utf-8');
-      const geojson = JSON.parse(content) as FeatureCollection<Polygon>;
+      const geojson = JSON.parse(content) as FeatureCollection<Polygon | MultiPolygon>;
 
       if (!geojson.features || geojson.features.length === 0) {
         console.warn(`No features found in ${config.filename}`);
@@ -83,9 +83,10 @@ export async function loadZones(): Promise<ZoneWithBoundary[]> {
       }
 
       const feature = geojson.features[0];
+      const geomType = (feature.geometry as { type?: string })?.type;
 
-      if (feature.geometry.type !== 'Polygon') {
-        console.warn(`Expected Polygon geometry in ${config.filename}, got ${feature.geometry.type}`);
+      if (geomType !== 'Polygon' && geomType !== 'MultiPolygon') {
+        console.warn(`Expected Polygon or MultiPolygon geometry in ${config.filename}, got ${geomType}`);
         continue;
       }
 
@@ -93,7 +94,7 @@ export async function loadZones(): Promise<ZoneWithBoundary[]> {
         id: config.id,
         zone_id: config.zone_id,
         name: config.name,
-        boundary: feature as any, // Type assertion - we know this is a valid Feature<Polygon>
+        boundary: feature as ZoneBoundary, // Valid Feature<Polygon | MultiPolygon>
       });
     } catch (error) {
       console.error(`Failed to load zone ${config.filename}:`, error);
