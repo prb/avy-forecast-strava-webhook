@@ -13,10 +13,10 @@
 
 import type { SQSBatchItemFailure, SQSBatchResponse, SQSEvent, SQSHandler } from 'aws-lambda';
 import type { StravaWebhookEvent } from './types.js';
+import { logger } from './logger.js';
 import { getActivity, updateActivity } from './strava.js';
 import { getForecastForCoordinate } from '@multifarious/forecast-api';
 import { formatForecast } from '@multifarious/forecast-formatter';
-import { logger } from './logger.js';
 
 /**
  * Main Lambda handler for SQS
