@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fetchNWACForecastsForDate } from './client.js';
+import { fetchNWACForecastsForDate, fetchForecastForZone } from './client.js';
 import * as apiBase from './api-base.js';
 
 // We need to mock the external call to fetchProducts in api-base
@@ -49,5 +49,45 @@ describe('fetchNWACForecastsForDate unit tests', () => {
         expect(results.map(r => r.id)).toContain(2);
         expect(results.map(r => r.id)).not.toContain(3);
         expect(results.map(r => r.id)).not.toContain(4);
+    });
+});
+
+describe('fetchForecastForZone unit tests', () => {
+    const forecastFor = (id: number, zone: { id: number; zone_id: string; name: string }) => ({
+        id,
+        product_type: 'forecast',
+        start_date: '2026-02-16T02:00:00+00:00',
+        avalanche_center: { name: 'Northwest Avalanche Center' },
+        forecast_zone: [{ ...zone, url: '', config: null }],
+    });
+
+    it('matches on the stable zone_id slug, not the numeric avalanche.org ID (#51)', async () => {
+        // 2025-26 season numbering: Stevens Pass is id 3024, zone_id '2'
+        (apiBase.fetchProducts as any).mockResolvedValue([
+            forecastFor(100, { id: 3020, zone_id: '1', name: 'Olympics' }),
+            forecastFor(101, { id: 3024, zone_id: '2', name: 'Stevens Pass' }),
+        ]);
+
+        const forecast = await fetchForecastForZone('NWAC', '2', '2026-02-16');
+
+        expect(forecast?.id).toBe(101);
+    });
+
+    it('queries the requested avalanche center', async () => {
+        (apiBase.fetchProducts as any).mockResolvedValue([]);
+
+        await fetchForecastForZone('UAC', 'salt-lake', '2026-02-16');
+
+        expect(apiBase.fetchProducts).toHaveBeenCalledWith(
+            expect.objectContaining({ avalanche_center_id: 'UAC' })
+        );
+    });
+
+    it('returns null when no product covers the zone', async () => {
+        (apiBase.fetchProducts as any).mockResolvedValue([
+            forecastFor(100, { id: 3020, zone_id: '1', name: 'Olympics' }),
+        ]);
+
+        expect(await fetchForecastForZone('NWAC', '2', '2026-02-16')).toBeNull();
     });
 });

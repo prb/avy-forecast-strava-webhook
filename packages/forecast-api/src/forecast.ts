@@ -1,5 +1,6 @@
 import { findZoneForCoordinate } from './zones/index.js';
-import { fetchNWACForecastForZone, buildForecastUrl } from './api/index.js';
+import { SUPPORTED_CENTERS } from './zones/config.js';
+import { fetchForecastForZone, buildForecastUrl } from './api/index.js';
 import { getCache } from './cache/index.js';
 import type {
   Coordinate,
@@ -56,6 +57,21 @@ export async function getForecastForCoordinate(
     };
   }
 
+  // Zones whose center we can't fetch/format yet get an explicit error rather
+  // than a misleading "no forecast available" (#52, #53)
+  if (!SUPPORTED_CENTERS.has(zone.center_id)) {
+    return {
+      zone: {
+        id: zone.id,
+        zone_id: zone.zone_id,
+        name: zone.name,
+      },
+      forecast: null,
+      product: null,
+      error: `Forecasts for ${zone.center_id} zones are not yet supported`,
+    };
+  }
+
   // Step 2: Try cache first (if enabled)
   if (useCache) {
     try {
@@ -78,7 +94,7 @@ export async function getForecastForCoordinate(
 
   // Step 3: Fetch from API (cache miss or cache disabled)
   try {
-    const product = await fetchNWACForecastForZone(zone.id, date);
+    const product = await fetchForecastForZone(zone.center_id, zone.zone_id, date);
 
     // Step 4: Store in cache (both positive and negative results)
     if (useCache) {

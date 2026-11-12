@@ -3,7 +3,7 @@ import {
   fetchProducts,
   fetchProduct,
   fetchNWACForecastsForDate,
-  fetchNWACForecastForZone,
+  fetchForecastForZone,
   buildForecastUrl,
 } from './client.js';
 import type { ForecastProduct } from '../types/index.js';
@@ -104,35 +104,44 @@ describe('Avalanche.org API Client', () => {
     }, 10000);
   });
 
-  describe('fetchNWACForecastForZone', () => {
-    it('should fetch forecast for West Slopes South (zone 1648)', async () => {
-      const forecast = await fetchNWACForecastForZone(1648, '2025-01-15');
+  describe('fetchForecastForZone', () => {
+    it('should fetch forecast for West Slopes South (zone_id 6)', async () => {
+      const forecast = await fetchForecastForZone('NWAC', '6', '2025-01-15');
 
       if (forecast) {
         expect(forecast.product_type).toBe('forecast');
         expect(forecast.forecast_zone).toBeDefined();
-        expect(forecast.forecast_zone.some(z => z.id === 1648)).toBe(true);
+        expect(forecast.forecast_zone.some(z => z.zone_id === '6')).toBe(true);
         expect(forecast.forecast_zone.some(z => z.name === 'West Slopes South')).toBe(true);
       }
       // If no forecast exists for that date/zone, it's okay to be null
     }, 10000);
 
+    // Regression test for #51: avalanche.org renumbered NWAC zone IDs for the
+    // 2025-26 season (1645-1657 -> 3020-3032), so matching must use zone_id.
+    it('should find a 2025-26 season forecast for Stevens Pass (zone_id 2)', async () => {
+      const forecast = await fetchForecastForZone('NWAC', '2', '2026-02-16');
+
+      expect(forecast).not.toBeNull();
+      expect(forecast!.forecast_zone.some(z => z.zone_id === '2')).toBe(true);
+    }, 10000);
+
     it('should return null for non-existent zone', async () => {
-      const forecast = await fetchNWACForecastForZone(99999, '2025-01-15');
+      const forecast = await fetchForecastForZone('NWAC', 'no-such-zone', '2025-01-15');
       expect(forecast).toBeNull();
     }, 10000);
 
     it('should handle different zones correctly', async () => {
       // Test multiple zones
-      const zones = [1645, 1646, 1647, 1648, 1649, 1653];
+      const zones = ['1', '4', '5', '6', '2', '7'];
       const date = '2025-01-15';
 
       for (const zoneId of zones) {
-        const forecast = await fetchNWACForecastForZone(zoneId, date);
+        const forecast = await fetchForecastForZone('NWAC', zoneId, date);
 
         if (forecast) {
           // If forecast exists, verify it's for the correct zone
-          expect(forecast.forecast_zone.some(z => z.id === zoneId)).toBe(true);
+          expect(forecast.forecast_zone.some(z => z.zone_id === zoneId)).toBe(true);
         }
       }
     }, 30000); // Longer timeout for multiple API calls

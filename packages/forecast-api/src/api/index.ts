@@ -7,8 +7,9 @@
 export {
   fetchProducts,
   fetchProduct,
+  fetchForecastsForDate,
   fetchNWACForecastsForDate,
-  fetchNWACForecastForZone,
+  fetchForecastForZone,
   buildForecastUrl,
   type ProductsQuery,
 } from './client.js';

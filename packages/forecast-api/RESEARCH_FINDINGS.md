@@ -63,6 +63,8 @@ This URL will permanently link to product 166585 for East Slopes South (zone_id 
 
 Note: The avalanche.org API uses different IDs (1645-1657) than NWAC's native API, but also includes a `zone_id` field (1-10) needed for URL construction.
 
+> **Update (2025-26 season, #51):** avalanche.org renumbered the NWAC zones to 3020-3032. The `zone_id` slugs (1-10) did not change, so the code now matches products on `(avalanche_center_id, zone_id)` and treats the numeric IDs above as internal keys only.
+
 ## NWAC Native API (Alternative)
 
 ### Base URL
@@ -192,7 +194,7 @@ To build an API that fetches avalanche forecasts for a given GPS coordinate and 
 
 ### 2. Forecast Retrieval
 - Query Avalanche.org API: `GET /v2/public/products?avalanche_center_id=NWAC&date_start={date}&date_end={date}`
-- Filter by zone ID from step 1 (match against `forecast_zone[0].id` field - values 1645-1657)
+- Filter by zone from step 1 (match against the stable `forecast_zone[].zone_id` slug; the numeric `id` is renumbered between seasons, see #51)
 - Filter by `product_type == "forecast"`
 
 ### 3. Proposed API Endpoint

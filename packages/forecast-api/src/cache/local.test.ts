@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LocalCacheStore } from './local.js';
+import { getCacheKey } from './types.js';
 import { rm } from 'fs/promises';
 import { existsSync } from 'fs';
 import type { ForecastProduct } from '../types/index.js';
@@ -158,7 +159,7 @@ describe('LocalCacheStore', () => {
 
       // Manually corrupt the file
       const { writeFile } = await import('fs/promises');
-      const filePath = `${testCacheDir}/zone-${zoneId}-date-${date}.json`;
+      const filePath = `${testCacheDir}/${getCacheKey(zoneId, date)}.json`;
       await writeFile(filePath, 'invalid json{{{', 'utf-8');
 
       // Should return null, not throw

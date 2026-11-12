@@ -58,8 +58,20 @@ export interface ForecastCache {
 }
 
 /**
+ * Cache key schema version.
+ *
+ * Bump this whenever previously cached entries may be wrong, so they're not
+ * read again. Entries older than 72h are cached permanently, so there's no
+ * other way for a bad entry to expire.
+ *
+ * - v2 (#51): v1 stored permanent negative results for the whole 2025-26 NWAC
+ *   season because products were matched on stale zone IDs.
+ */
+export const CACHE_KEY_VERSION = 'v2';
+
+/**
  * Generate cache key from zone ID and date
  */
 export function getCacheKey(zoneId: number, date: string): string {
-  return `zone-${zoneId}-date-${date}`;
+  return `${CACHE_KEY_VERSION}-zone-${zoneId}-date-${date}`;
 }

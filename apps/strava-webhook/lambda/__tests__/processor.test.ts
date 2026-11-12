@@ -36,7 +36,7 @@ vi.mock('../db.js', () => ({
 // Mock the forecast API module
 vi.mock('@multifarious/forecast-api', () => ({
   getForecastForCoordinate: vi.fn(),
-  fetchNWACForecastForZone: vi.fn(),
+  fetchForecastForZone: vi.fn(),
 }));
 
 import * as strava from '../strava.js';
@@ -268,7 +268,7 @@ describe('Webhook Handler', () => {
       expect(forecastApi.getForecastForCoordinate).toHaveBeenCalled();
 
       // Should not fetch full product or update description
-      expect(forecastApi.fetchNWACForecastForZone).not.toHaveBeenCalled();
+      expect(forecastApi.fetchForecastForZone).not.toHaveBeenCalled();
       expect(strava.updateActivity).not.toHaveBeenCalled();
     });
 
@@ -296,13 +296,13 @@ describe('Webhook Handler', () => {
       vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue(mockForecastResponse as any);
 
       // Mock full product fetch returning null
-      vi.mocked(forecastApi.fetchNWACForecastForZone).mockResolvedValue(null);
+      vi.mocked(forecastApi.fetchForecastForZone).mockResolvedValue(null);
 
       await handler(event, {} as any, {} as any);
 
       expect(strava.getActivity).toHaveBeenCalled();
       expect(forecastApi.getForecastForCoordinate).toHaveBeenCalled();
-      expect(forecastApi.fetchNWACForecastForZone).not.toHaveBeenCalled();
+      expect(forecastApi.fetchForecastForZone).not.toHaveBeenCalled();
 
       // Should not update description if full product fetch fails
       expect(strava.updateActivity).not.toHaveBeenCalled();

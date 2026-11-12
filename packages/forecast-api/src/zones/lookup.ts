@@ -94,6 +94,7 @@ export async function loadZones(): Promise<ZoneWithBoundary[]> {
         id: config.id,
         zone_id: config.zone_id,
         name: config.name,
+        center_id: config.center_id,
         boundary: feature as ZoneBoundary, // Valid Feature<Polygon | MultiPolygon>
       });
     } catch (error) {

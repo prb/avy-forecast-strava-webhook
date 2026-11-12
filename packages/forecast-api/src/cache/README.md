@@ -105,9 +105,9 @@ const result = await getForecastForCoordinate(coord, date, false);
 **Structure:**
 ```
 /tmp/nwac-cache/
-  zone-1645-date-2025-01-15.json
-  zone-1646-date-2025-01-15.json
-  zone-1647-date-2025-01-16.json
+  v2-zone-1645-date-2025-01-15.json
+  v2-zone-1646-date-2025-01-15.json
+  v2-zone-1647-date-2025-01-16.json
   ...
 ```
 
@@ -122,8 +122,8 @@ const result = await getForecastForCoordinate(coord, date, false);
 ```
 s3://bucket-name/
   forecasts/
-    zone-1645-date-2025-01-15.json
-    zone-1646-date-2025-01-15.json
+    v2-zone-1645-date-2025-01-15.json
+    v2-zone-1646-date-2025-01-15.json
     ...
 ```
 
@@ -165,9 +165,11 @@ npm test
 zone-{zoneId}-date-{YYYY-MM-DD}
 ```
 
+The `v2-` prefix is `CACHE_KEY_VERSION`; bump it whenever existing entries may be wrong (entries older than 72h never expire). v2 was introduced in #51.
+
 Examples:
-- `zone-1648-date-2025-01-15`
-- `zone-1649-date-2025-01-20`
+- `v2-zone-1648-date-2025-01-15`
+- `v2-zone-1649-date-2025-01-20`
 
 ## Implementation Notes
 
