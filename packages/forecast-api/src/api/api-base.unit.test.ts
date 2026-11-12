@@ -31,24 +31,17 @@ describe('api-base unit tests', () => {
             );
         });
 
-        it('should throw error when upstream returns HTTP 200 with empty skeleton / null fields', async () => {
-            const emptySkeleton = {
-                avalanche_center: null,
-                media: null,
-                weather_data: null,
-                published_time: null,
-                expires_time: null,
-                created_at: null,
-                updated_at: null,
-                forecast_avalanche_problems: [],
-                danger: [],
-                forecast_zone: [],
-            };
-
+        it.each([
+            ['null skeleton from upstream', { avalanche_center: null, published_time: null, id: null }],
+            ['completely empty object', {}],
+            ['missing published_time', { id: 12345, published_time: null }],
+            ['missing id', { id: null, published_time: '2025-01-15T00:00:00Z' }],
+            ['null payload', null],
+        ])('should throw error when payload is %s', async (_, payload) => {
             globalThis.fetch = vi.fn().mockResolvedValue({
                 ok: true,
                 status: 200,
-                json: async () => emptySkeleton,
+                json: async () => payload,
             } as Response);
 
             await expect(fetchProduct(999999999)).rejects.toThrow(
