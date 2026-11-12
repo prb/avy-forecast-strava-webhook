@@ -175,6 +175,23 @@ describe('Ingest Handler', () => {
             expect(body.error).toBe('Failed to queue event');
         });
 
+        it('should not return internal error details on unexpected failures', async () => {
+            // Non-enumerable so request logging doesn't trip it; the handler logic does
+            const event = { httpMethod: 'GET', headers: {} } as unknown as APIGatewayProxyEvent;
+            Object.defineProperty(event, 'queryStringParameters', {
+                enumerable: false,
+                get(): never {
+                    throw new Error('secret internal detail');
+                },
+            });
+
+            const result = await handler(event);
+
+            expect(result.statusCode).toBe(500);
+            expect(JSON.parse(result.body)).toEqual({ error: 'Internal server error' });
+            expect(result.body).not.toContain('secret internal detail');
+        });
+
         it('should handle missing body', async () => {
             const event: APIGatewayProxyEvent = {
                 httpMethod: 'POST',

@@ -174,6 +174,33 @@ cd apps/strava-webhook
 - **Action**: Sends email to configured alert address
 - **Status**: Check CloudWatch Console → Alarms
 
+**Dead-Letter Queue Alarm**
+- **Metric**: `ApproximateNumberOfMessagesVisible` on the webhook DLQ
+- **Threshold**: >= 1 message
+- **Meaning**: a webhook event failed processing 3 times (`maxReceiveCount`) and was moved to the DLQ instead of being retried until the main queue's 4-day retention ran out
+- **Action**: Sends email to configured alert address
+
+### Handling Dead-Lettered Events
+
+The DLQ URL is in the stack output `DeadLetterQueueUrl`. Messages are kept for 14 days.
+
+```bash
+DLQ_URL=$(aws cloudformation describe-stacks --stack-name StravaWebhookStack \
+  --query "Stacks[0].Outputs[?OutputKey=='DeadLetterQueueUrl'].OutputValue" --output text)
+
+# Inspect (doesn't delete; messages reappear after the visibility timeout)
+aws sqs receive-message --queue-url "$DLQ_URL" --max-number-of-messages 10
+
+# Find the cause in the processor logs (event = "RecordProcessingFailed")
+
+# After fixing the cause, move the messages back to the main queue
+aws sqs start-message-move-task --source-arn "$(aws sqs get-queue-attributes \
+  --queue-url "$DLQ_URL" --attribute-names QueueArn --query Attributes.QueueArn --output text)"
+
+# Or, if they can't succeed (e.g. the athlete deauthorized), purge them
+aws sqs purge-queue --queue-url "$DLQ_URL"
+```
+
 ### Metrics Dashboard
 
 View in AWS Console:
@@ -434,8 +461,9 @@ aws ce get-cost-and-usage \
 **If traffic increases:**
 1. Monitor Lambda concurrency in CloudWatch
 2. Consider Lambda reserved concurrency
-3. Add DLQ for failed SQS messages
-4. Implement exponential backoff for external APIs
+3. Implement exponential backoff for external APIs
+
+The processor reports per-record failures (`ReportBatchItemFailures`), so `batchSize` can be raised without one failed record retrying the whole batch.
 
 ### Security Updates
 

@@ -27,12 +27,10 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   } catch (error) {
     console.error('Error handling ingest:', error);
 
+    // Details are logged above; don't return them to the caller
     return {
       statusCode: 500,
-      body: JSON.stringify({
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      }),
+      body: JSON.stringify({ error: 'Internal server error' }),
     };
   }
 }

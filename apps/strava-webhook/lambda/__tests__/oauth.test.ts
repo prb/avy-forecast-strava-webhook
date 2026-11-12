@@ -86,6 +86,21 @@ describe('OAuth Handler', () => {
       expect(result.statusCode).toBe(500);
       expect(result.body).toContain('Error');
     });
+
+    it('should not reflect internal error messages into the error page', async () => {
+      vi.mocked(db.createOAuthState).mockRejectedValue(new Error('<script>alert(1)</script> upstream detail'));
+
+      const result = await handler({
+        httpMethod: 'GET',
+        path: '/connect',
+        headers: { Host: 'api.example.com' },
+        requestContext: { stage: 'prod' } as any,
+      } as any);
+
+      expect(result.statusCode).toBe(500);
+      expect(result.body).not.toContain('<script>');
+      expect(result.body).not.toContain('upstream detail');
+    });
   });
 
   describe('GET /callback - OAuth callback', () => {
@@ -148,6 +163,26 @@ describe('OAuth Handler', () => {
       expect(result.statusCode).toBe(200);
       expect(result.body).toContain('Successfully Connected');
       expect(result.body).toContain('Test User');
+    });
+
+    it('should HTML-escape the athlete name on the success page', async () => {
+      vi.mocked(db.validateAndConsumeOAuthState).mockResolvedValue(true);
+      vi.mocked(strava.exchangeCodeForToken).mockResolvedValue({
+        ...mockTokenResponse,
+        athlete: { ...mockTokenResponse.athlete, firstname: '<img src=x onerror=alert(1)>', lastname: 'O\'Neil & Co' },
+      });
+      vi.mocked(db.createUserRecord).mockReturnValue(mockUserRecord);
+      vi.mocked(db.saveUser).mockResolvedValue(undefined);
+
+      const result = await handler({
+        httpMethod: 'GET',
+        path: '/callback',
+        queryStringParameters: { code: 'c', state: 's' },
+      } as any);
+
+      expect(result.statusCode).toBe(200);
+      expect(result.body).not.toContain('<img');
+      expect(result.body).toContain('&lt;img src=x onerror=alert(1)&gt; O&#39;Neil &amp; Co');
     });
 
     it('should reject callback with invalid state', async () => {
