@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { SQSEvent } from 'aws-lambda';
+import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { handler } from '../processor.js';
 import type { ForecastProductResponse, ForecastResponse } from '@multifarious/forecast-api';
 import {
@@ -594,7 +594,9 @@ describe('Webhook Handler', () => {
         product: { ...mockMtHoodForecast, forecast_zone: [] },
       } as ForecastProductResponse as any);
 
-      await expect(handler(event, {} as any, {} as any)).resolves.toBeUndefined();
+      // Not a failure: neither thrown nor reported back to SQS for retry
+      const result = (await handler(event, {} as any, {} as any)) as SQSBatchResponse | void;
+      expect(result?.batchItemFailures ?? []).toEqual([]);
 
       const updates = vi.mocked(strava.updateActivity).mock.calls[0][2];
       expect(updates.description).toContain('[No avalanche forecast available: Forecast could not be formatted]');
