@@ -119,21 +119,21 @@ describe('Forecast Formatter', () => {
     it('should format Mt Hood forecast correctly', () => {
       const result = formatForecast(mockProduct);
       expect(result).toBe(
-        'NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)'
+        'NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166378)'
       );
     });
 
     it('should format without NWAC prefix when requested', () => {
       const result = formatForecast(mockProduct, { includeNWAC: false });
       expect(result).toBe(
-        'Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)'
+        'Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166378)'
       );
     });
 
     it('should format tomorrow forecast', () => {
       const result = formatForecast(mockProduct, { day: 'tomorrow' });
       expect(result).toBe(
-        'NWAC Mt Hood Zone forecast: 2🟨/2🟨/1🟩 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)'
+        'NWAC Mt Hood Zone forecast: 2🟨/2🟨/1🟩 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166378)'
       );
     });
 
@@ -150,7 +150,7 @@ describe('Forecast Formatter', () => {
       const noBands = { ...mockProduct, danger: [] };
 
       expect(formatForecast(noBands)).toBe(
-        'NWAC Mt Hood Zone forecast: 3🟧 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)'
+        'NWAC Mt Hood Zone forecast: 3🟧 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166378)'
       );
     });
 
@@ -192,7 +192,7 @@ describe('Forecast Formatter', () => {
       };
 
       expect(formatForecast(uacProduct, { center: 'UAC' })).toBe(
-        'UAC Salt Lake Zone forecast: 2🟨 (https://utahavalanchecenter.org/forecast/salt-lake)'
+        'UAC Salt Lake Zone forecast: 2🟨 (https://utahavalanchecenter.org/forecast/salt-lake/4/9/2025)'
       );
     });
 
@@ -228,6 +228,8 @@ describe('Forecast Formatter', () => {
 
     it.each([
       ['current NWAC format', nwacLine],
+      ['NWAC format with a zone page link', 'NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166378)'],
+      ['UAC format with a dated link', 'UAC Salt Lake Zone forecast: 2🟨 (https://utahavalanchecenter.org/forecast/salt-lake/2/16/2026)'],
       ['UAC format', uacLine],
       ['legacy NWAC format without "Zone"', legacyLine],
       ['NWAC format with a rewritten link', 'NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://strava.app.link/xyz)'],

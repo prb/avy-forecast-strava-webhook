@@ -579,7 +579,7 @@ describe('Webhook Handler', () => {
 
       const updates = vi.mocked(strava.updateActivity).mock.calls[0][2];
       expect(updates.description).toBe(
-        'Wasatch tour\n\nUAC Salt Lake Zone forecast: 2🟨 (https://utahavalanchecenter.org/forecast/salt-lake)'
+        'Wasatch tour\n\nUAC Salt Lake Zone forecast: 2🟨 (https://utahavalanchecenter.org/forecast/salt-lake/4/9/2025)'
       );
     });
 

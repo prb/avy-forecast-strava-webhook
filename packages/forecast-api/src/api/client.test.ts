@@ -177,7 +177,7 @@ describe('Avalanche.org API Client', () => {
       };
 
       const url = buildForecastUrl(mockProduct);
-      expect(url).toBe('https://nwac.us/avalanche-forecast/#/forecast/6/166672');
+      expect(url).toBe('https://nwac.us/forecasts/avalanche/west-slopes-south#/forecast/6/166672');
     });
 
     it('should throw error if product has no zones', () => {
@@ -198,7 +198,7 @@ describe('Avalanche.org API Client', () => {
         const forecast = forecasts[0];
         const url = buildForecastUrl(forecast);
 
-        expect(url).toMatch(/^https:\/\/nwac\.us\/avalanche-forecast\/#\/forecast\/\d+\/\d+$/);
+        expect(url).toMatch(/^https:\/\/nwac\.us\/forecasts\/avalanche\/[a-z0-9-]+#\/forecast\/\d+\/\d+$/);
 
         // Verify URL components match product data
         const zone = forecast.forecast_zone[0];

@@ -31,7 +31,15 @@ https://api.avalanche.org/v2/public/
 
 ### Forecast Permalink URL Structure
 
-**This is the permanent URL for any NWAC forecast:**
+> **Update (2026):** NWAC's site moved to `https://nwac.us/forecasts/avalanche/{zone-slug}`,
+> and `/avalanche-forecast/` now redirects to the forecasts index. The working permalink
+> is the zone page plus the same hash route, e.g.
+> `https://nwac.us/forecasts/avalanche/east-slopes-south#/forecast/9/166585`. This is
+> where NWAC itself redirects `/forecasts/avalanche/{zone-slug}/{YYYY-MM-DD}`. The zone
+> page comes from `forecast_zone[0].url` (see `buildForecastUrl`). The original finding
+> is kept below for reference.
+
+**Original permalink format (pre-2026):**
 ```
 https://nwac.us/avalanche-forecast/#/forecast/{zone_id}/{product_id}
 ```

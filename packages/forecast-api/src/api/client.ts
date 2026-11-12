@@ -81,10 +81,16 @@ export async function fetchForecastForZone(
 /**
  * Build a link to a forecast
  *
- * - NWAC: permalink to the specific forecast product
- * - Other centers: the zone's forecast page as reported by avalanche.org
- *   (e.g. https://utahavalanchecenter.org/forecast/salt-lake), falling back to
- *   the center's home page
+ * Links point at the specific forecast, not the zone's current one, so a link
+ * on an old activity still shows the forecast for that day:
+ *
+ * - NWAC: the zone page plus the forecast's hash route, e.g.
+ *   https://nwac.us/forecasts/avalanche/snoqualmie-pass#/forecast/3/180554
+ *   (the same address NWAC redirects /forecasts/avalanche/{zone}/{date} to)
+ * - UAC: the dated forecast page, e.g.
+ *   https://utahavalanchecenter.org/forecast/salt-lake/2/16/2026
+ * - Other centers: the zone's forecast page as reported by avalanche.org,
+ *   falling back to the center's home page
  *
  * @param product Forecast product
  * @param centerId Avalanche center that published the product (default: NWAC)
@@ -99,12 +105,26 @@ export function buildForecastUrl(
   }
 
   const zone = product.forecast_zone[0];
+  const zoneUrl = zone.url ? zone.url.split('#')[0].replace(/\/+$/, '') : '';
 
   if (centerId === 'NWAC') {
-    return `https://nwac.us/avalanche-forecast/#/forecast/${zone.zone_id}/${product.id}`;
+    const hashRoute = `#/forecast/${zone.zone_id}/${product.id}`;
+    if (/^https:\/\/nwac\.us\/forecasts\/avalanche\/[^/?#]+$/.test(zoneUrl)) {
+      return `${zoneUrl}${hashRoute}`;
+    }
+    // Missing or pre-redesign zone URL: NWAC's zone slugs are the slugified
+    // zone names (e.g. "Mt Hood" -> mt-hood)
+    const slug = zone.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return `https://nwac.us/forecasts/avalanche/${slug}${hashRoute}`;
   }
 
-  const url = zone.url || product.avalanche_center?.url;
+  if (centerId === 'UAC' && zoneUrl) {
+    // Same date the product was matched on (see fetchForecastsForDate)
+    const [year, month, day] = product.start_date.split('T')[0].split('-').map(Number);
+    return `${zoneUrl}/${month}/${day}/${year}`;
+  }
+
+  const url = zoneUrl || product.avalanche_center?.url;
   if (!url) {
     throw new Error(`Forecast ${product.id} has no ${centerId} zone or center URL`);
   }

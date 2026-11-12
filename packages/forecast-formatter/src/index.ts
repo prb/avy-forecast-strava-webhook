@@ -56,8 +56,8 @@ export interface FormatForecastOptions {
  * Format forecast product to string representation
  *
  * Example output:
- * "NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)"
- * "UAC Salt Lake Zone forecast: 2🟨 (https://utahavalanchecenter.org/forecast/salt-lake)"
+ * "NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166378)"
+ * "UAC Salt Lake Zone forecast: 2🟨 (https://utahavalanchecenter.org/forecast/salt-lake/2/16/2026)"
  *
  * Products without elevation-band ratings (e.g. UAC on avalanche.org) fall back
  * to the overall `danger_rating` for the current day.

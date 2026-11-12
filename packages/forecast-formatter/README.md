@@ -34,7 +34,7 @@ const result = await getForecastForCoordinate(
 if (result.product) {
   const formatted = formatForecast(result.product);
   console.log(formatted);
-  // Output: "NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)"
+  // Output: "NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166378)"
 }
 ```
 
