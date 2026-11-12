@@ -43,5 +43,8 @@ coverage/
 cdk.out/
 cdk.context.json
 
+# Local work
+.worktrees/
+
 # Avoid checking in files with secrets.
 *.secrets
