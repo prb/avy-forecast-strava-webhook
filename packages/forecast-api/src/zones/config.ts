@@ -21,10 +21,12 @@ export type AvalancheCenterId = 'NWAC' | 'UAC' | 'CAIC';
 /**
  * Centers whose forecasts can currently be fetched and formatted end-to-end.
  *
- * - UAC: pending center-aware formatting (#53)
- * - CAIC: avalanche.org sub-zones don't map onto our boundaries (#52)
+ * - UAC: supported since #53. avalanche.org doesn't publish the Abajos or
+ *   Southwest zones, so those return "no forecast available".
+ * - CAIC: not supported; avalanche.org sub-zones don't map onto our
+ *   boundaries (#52)
  */
-export const SUPPORTED_CENTERS: ReadonlySet<AvalancheCenterId> = new Set(['NWAC']);
+export const SUPPORTED_CENTERS: ReadonlySet<AvalancheCenterId> = new Set(['NWAC', 'UAC']);
 
 export interface ZoneConfig {
   id: number;

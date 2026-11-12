@@ -79,16 +79,34 @@ export async function fetchForecastForZone(
 }
 
 /**
- * Build permalink URL for a forecast
+ * Build a link to a forecast
+ *
+ * - NWAC: permalink to the specific forecast product
+ * - Other centers: the zone's forecast page as reported by avalanche.org
+ *   (e.g. https://utahavalanchecenter.org/forecast/salt-lake), falling back to
+ *   the center's home page
  *
  * @param product Forecast product
- * @returns Permalink URL
+ * @param centerId Avalanche center that published the product (default: NWAC)
+ * @returns Forecast URL
  */
-export function buildForecastUrl(product: ForecastProduct): string {
+export function buildForecastUrl(
+  product: ForecastProduct,
+  centerId: AvalancheCenterId = 'NWAC'
+): string {
   if (!product.forecast_zone || product.forecast_zone.length === 0) {
     throw new Error('Forecast has no zone information');
   }
 
   const zone = product.forecast_zone[0];
-  return `https://nwac.us/avalanche-forecast/#/forecast/${zone.zone_id}/${product.id}`;
+
+  if (centerId === 'NWAC') {
+    return `https://nwac.us/avalanche-forecast/#/forecast/${zone.zone_id}/${product.id}`;
+  }
+
+  const url = zone.url || product.avalanche_center?.url;
+  if (!url) {
+    throw new Error(`Forecast ${product.id} has no ${centerId} zone or center URL`);
+  }
+  return url;
 }

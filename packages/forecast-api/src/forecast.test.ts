@@ -54,7 +54,7 @@ describe('Forecast Query', () => {
       const result = await getForecastForCoordinate(coordinate, date);
 
       expect(result.forecast).toBeNull();
-      expect(result.error).toContain('outside all NWAC forecast zones');
+      expect(result.error).toContain('outside all supported forecast zones');
     }, 15000);
 
     it('should handle multiple different zones', async () => {

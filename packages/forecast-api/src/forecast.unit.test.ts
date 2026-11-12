@@ -26,6 +26,20 @@ describe('getForecastForCoordinate (hermetic)', () => {
     expect(api.fetchForecastForZone).toHaveBeenCalledWith('NWAC', '2', '2026-02-16');
   });
 
+  it('looks up UAC zones by center and slug, and reports the center (#53)', async () => {
+    vi.mocked(api.fetchForecastForZone).mockResolvedValue(null);
+
+    // Alta, UT (Salt Lake zone)
+    const result = await getForecastForCoordinate(
+      { latitude: 40.5884, longitude: -111.6386 },
+      '2026-02-16',
+      { includeProduct: true, useCache: false }
+    );
+
+    expect(api.fetchForecastForZone).toHaveBeenCalledWith('UAC', 'salt-lake', '2026-02-16');
+    expect(result.zone).toEqual({ id: 2005, zone_id: 'salt-lake', name: 'Salt Lake', center_id: 'UAC' });
+  });
+
   it('returns an explicit "not yet supported" error for CAIC zones without calling the API', async () => {
     // Breckenridge, CO (Vail & Summit County)
     const result = await getForecastForCoordinate(

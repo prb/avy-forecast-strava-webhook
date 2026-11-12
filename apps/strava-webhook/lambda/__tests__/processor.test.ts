@@ -34,7 +34,9 @@ vi.mock('../db.js', () => ({
 }));
 
 // Mock the forecast API module
-vi.mock('@multifarious/forecast-api', () => ({
+// (keeps the real buildForecastUrl, which forecast-formatter uses)
+vi.mock('@multifarious/forecast-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@multifarious/forecast-api')>()),
   getForecastForCoordinate: vi.fn(),
   fetchForecastForZone: vi.fn(),
 }));
@@ -526,6 +528,76 @@ describe('Webhook Handler', () => {
       const updateCall = vi.mocked(strava.updateActivity).mock.calls[0][2];
       expect(updateCall.description).not.toContain('166377'); // Old forecast ID
       expect(updateCall.description).toContain('166378'); // New forecast ID
+    });
+
+    it('should refresh a forecast that starts the description (#53)', async () => {
+      const event = createSQSEvent(mockUpdateWebhookEvent);
+      vi.mocked(strava.getActivity).mockResolvedValue({
+        ...mockBackcountryActivity,
+        name: 'Mt Hood Tour #avy_forecast',
+        description: 'NWAC Mt Hood Zone forecast: 2🟨/2🟨/1🟩 (https://nwac.us/avalanche-forecast/#/forecast/10/166377)',
+      });
+      vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue({
+        zone: { id: 1657, zone_id: '10', name: 'Mt Hood', center_id: 'NWAC' },
+        product: mockMtHoodForecast,
+      } as ForecastProductResponse as any);
+
+      await handler(event, {} as any, {} as any);
+
+      const updates = vi.mocked(strava.updateActivity).mock.calls[0][2];
+      expect(updates.description).toBe(expectedMtHoodForecastText);
+    });
+
+    it('should format UAC forecasts with the UAC prefix and zone URL (#53)', async () => {
+      const event = createSQSEvent(mockWebhookEvent);
+      vi.mocked(strava.getActivity).mockResolvedValue({
+        ...mockBackcountryActivity,
+        start_latlng: [40.6, -111.6],
+        description: 'Wasatch tour',
+      });
+      vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue({
+        zone: { id: 2005, zone_id: 'salt-lake', name: 'Salt Lake', center_id: 'UAC' },
+        product: {
+          ...mockMtHoodForecast,
+          id: 180600,
+          danger_rating: 2,
+          danger: [],
+          avalanche_center: { name: 'Utah Avalanche Center' },
+          forecast_zone: [
+            {
+              id: 1738,
+              zone_id: 'salt-lake',
+              name: 'Salt Lake',
+              url: 'https://utahavalanchecenter.org/forecast/salt-lake',
+              config: null,
+            },
+          ],
+        },
+      } as ForecastProductResponse as any);
+
+      await handler(event, {} as any, {} as any);
+
+      const updates = vi.mocked(strava.updateActivity).mock.calls[0][2];
+      expect(updates.description).toBe(
+        'Wasatch tour\n\nUAC Salt Lake Zone forecast: 2🟨 (https://utahavalanchecenter.org/forecast/salt-lake)'
+      );
+    });
+
+    it('should not throw (and retry forever) when a product cannot be formatted', async () => {
+      const event = createSQSEvent(mockUpdateWebhookEvent);
+      vi.mocked(strava.getActivity).mockResolvedValue({
+        ...mockBackcountryActivity,
+        name: 'Tour #avy_forecast',
+      });
+      vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue({
+        zone: { id: 1657, zone_id: '10', name: 'Mt Hood', center_id: 'NWAC' },
+        product: { ...mockMtHoodForecast, forecast_zone: [] },
+      } as ForecastProductResponse as any);
+
+      await expect(handler(event, {} as any, {} as any)).resolves.toBeUndefined();
+
+      const updates = vi.mocked(strava.updateActivity).mock.calls[0][2];
+      expect(updates.description).toContain('[No avalanche forecast available: Forecast could not be formatted]');
     });
 
     it('should remove #avy_forecast and add message for no-location activity', async () => {

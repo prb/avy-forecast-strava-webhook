@@ -1,4 +1,5 @@
-import type { ForecastProduct, DangerRating } from '@multifarious/forecast-api';
+import { buildForecastUrl } from '@multifarious/forecast-api';
+import type { AvalancheCenterId, ForecastProduct, DangerRating } from '@multifarious/forecast-api';
 
 /**
  * Map danger level (0-5) to colored unicode square
@@ -38,52 +39,96 @@ export function formatDangerRatings(danger: DangerRating): string {
 }
 
 /**
+ * Options for formatForecast
+ */
+export interface FormatForecastOptions {
+  /** Avalanche center that published the product (default: 'NWAC') */
+  center?: AvalancheCenterId;
+  /** Include the center prefix, e.g. 'NWAC ' (default: true) */
+  includeCenter?: boolean;
+  /** @deprecated Use `includeCenter`. */
+  includeNWAC?: boolean;
+  /** Which day to show: 'current' or 'tomorrow' (default: 'current') */
+  day?: 'current' | 'tomorrow';
+}
+
+/**
  * Format forecast product to string representation
  *
  * Example output:
  * "NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)"
+ * "UAC Salt Lake Zone forecast: 2🟨 (https://utahavalanchecenter.org/forecast/salt-lake)"
+ *
+ * Products without elevation-band ratings (e.g. UAC on avalanche.org) fall back
+ * to the overall `danger_rating` for the current day.
  *
  * @param product Forecast product from API
  * @param options Formatting options
  * @returns Formatted forecast string
  */
-export function formatForecast(
-  product: ForecastProduct,
-  options?: {
-    /** Include 'NWAC' prefix (default: true) */
-    includeNWAC?: boolean;
-    /** Which day to show: 'current' or 'tomorrow' (default: 'current') */
-    day?: 'current' | 'tomorrow';
-  }
-): string {
-  const { includeNWAC = true, day = 'current' } = options || {};
+export function formatForecast(product: ForecastProduct, options: FormatForecastOptions = {}): string {
+  const { center = 'NWAC', day = 'current' } = options;
+  const includeCenter = options.includeCenter ?? options.includeNWAC ?? true;
 
   // Get zone information
   if (!product.forecast_zone || product.forecast_zone.length === 0) {
     throw new Error('Forecast product has no zone information');
   }
 
-  const zone = product.forecast_zone[0];
-  const zoneName = zone.name;
-
-  // Get danger ratings for the specified day
-  if (!product.danger || product.danger.length === 0) {
-    throw new Error('Forecast product has no danger rating information');
-  }
-
-  const dangerForDay = product.danger.find(d => d.valid_day === day);
-  if (!dangerForDay) {
-    throw new Error(`No danger ratings found for day: ${day}`);
-  }
-
-  // Build URL
-  const url = `https://nwac.us/avalanche-forecast/#/forecast/${zone.zone_id}/${product.id}`;
-
-  // Format the string
-  const prefix = includeNWAC ? 'NWAC ' : '';
-  const dangerString = formatDangerRatings(dangerForDay);
+  const zoneName = product.forecast_zone[0].name;
+  const dangerString = formatDangerForDay(product, day);
+  const url = buildForecastUrl(product, center);
+  const prefix = includeCenter ? `${center} ` : '';
 
   return `${prefix}${zoneName} Zone forecast: ${dangerString} (${url})`;
+}
+
+/**
+ * Format the danger for a forecast day, by elevation band when available
+ */
+function formatDangerForDay(product: ForecastProduct, day: 'current' | 'tomorrow'): string {
+  const dangerForDay = product.danger?.find(d => d.valid_day === day);
+  if (dangerForDay) {
+    return formatDangerRatings(dangerForDay);
+  }
+
+  // No elevation bands: fall back to the overall rating, which is for the current day only
+  const hasBands = (product.danger?.length ?? 0) > 0;
+  if (!hasBands && day === 'current' && typeof product.danger_rating === 'number') {
+    return `${product.danger_rating}${getDangerSquare(product.danger_rating)}`;
+  }
+
+  if (!hasBands && day === 'current') {
+    throw new Error('Forecast product has no danger rating information');
+  }
+  throw new Error(`No danger ratings found for day: ${day}`);
+}
+
+/**
+ * Matches a forecast line written by formatForecast, for any supported center,
+ * plus legacy lines that only carry the NWAC permalink
+ * (e.g. "NWAC Mt Hood forecast: ... (https://nwac.us/avalanche-forecast/#/forecast/10/1)").
+ */
+const FORECAST_LINE = /^(?:(?:NWAC|UAC|CAIC) .+ Zone forecast: .*|.*https:\/\/nwac\.us\/avalanche-forecast\/#\/forecast\/.*)$/;
+
+/**
+ * Whether a description already contains a forecast line added by this service
+ */
+export function hasForecastLine(description: string): boolean {
+  return description.split('\n').some(line => FORECAST_LINE.test(line));
+}
+
+/**
+ * Remove every forecast line added by this service, wherever it appears,
+ * and tidy the blank lines left behind
+ */
+export function removeForecastLines(description: string): string {
+  return description
+    .split('\n')
+    .filter(line => !FORECAST_LINE.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**

@@ -110,14 +110,21 @@ export interface Coordinate {
 }
 
 /**
+ * Zone summary included in forecast query responses
+ */
+export interface ForecastResponseZone {
+  id: number;
+  zone_id: string;
+  name: string;
+  /** Avalanche center for the zone; absent when the coordinate is outside all zones */
+  center_id?: AvalancheCenterId;
+}
+
+/**
  * API response for forecast query
  */
 export interface ForecastResponse {
-  zone: {
-    id: number;
-    zone_id: string;
-    name: string;
-  };
+  zone: ForecastResponseZone;
   forecast: {
     product_id: number;
     date: string;
@@ -133,11 +140,7 @@ export interface ForecastResponse {
  * API response for forecast query that includes the full forecast product
  */
 export interface ForecastProductResponse {
-  zone: {
-    id: number;
-    zone_id: string;
-    name: string;
-  };
+  zone: ForecastResponseZone;
   product: ForecastProduct | null;
   error?: string;
 }
