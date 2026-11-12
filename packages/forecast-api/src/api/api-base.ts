@@ -67,7 +67,15 @@ export async function fetchProduct(productId: number): Promise<ForecastProduct> 
             throw new Error(`API request failed: ${response.status} ${response.statusText}`);
         }
 
-        const data = await response.json();
+        const data: unknown = await response.json();
+        const p = data as Record<string, unknown> | null;
+
+        // The avalanche.org API returns HTTP 200 with null fields (no id, null published_time)
+        // when a product is not found, rather than returning HTTP 404. (Real IDs are positive integers).
+        if (!p || typeof p !== 'object' || !p.id || !p.published_time) {
+            throw new Error(`Product ${productId} not found`);
+        }
+
         return data as ForecastProduct;
     } catch (error) {
         if (error instanceof Error) {
