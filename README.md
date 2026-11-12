@@ -35,8 +35,11 @@ npm run build
 
 ### Test
 ```bash
-npm test
+npm test            # all tests, including live avalanche.org API suites
+npm run test:unit   # hermetic tests only (what CI runs)
 ```
+
+Use `npm run test:watch -w <workspace>` for watch mode.
 
 ## Project Structure
 

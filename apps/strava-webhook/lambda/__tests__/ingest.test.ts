@@ -175,6 +175,25 @@ describe('Ingest Handler', () => {
             expect(body.error).toBe('Failed to queue event');
         });
 
+        it('should not log the verify token or request headers', async () => {
+            const log = vi.spyOn(console, 'log');
+            const warn = vi.spyOn(console, 'warn');
+
+            await handler({
+                httpMethod: 'GET',
+                headers: { Authorization: 'Bearer header-secret' },
+                queryStringParameters: {
+                    'hub.mode': 'subscribe',
+                    'hub.verify_token': 'token-secret',
+                    'hub.challenge': 'c',
+                },
+            } as unknown as APIGatewayProxyEvent);
+
+            const logged = [...log.mock.calls, ...warn.mock.calls].flat().join('\n');
+            expect(logged).not.toContain('token-secret');
+            expect(logged).not.toContain('header-secret');
+        });
+
         it('should not return internal error details on unexpected failures', async () => {
             // Non-enumerable so request logging doesn't trip it; the handler logic does
             const event = { httpMethod: 'GET', headers: {} } as unknown as APIGatewayProxyEvent;
