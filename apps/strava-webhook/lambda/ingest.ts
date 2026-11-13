@@ -1,5 +1,7 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { requireEnv } from './env.js';
+import { logger, requestSummary } from './logger.js';
 
 const sqs = new SQSClient({});
 
@@ -7,7 +9,7 @@ const sqs = new SQSClient({});
  * Main Lambda handler
  */
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  console.log('Ingest event received:', JSON.stringify(event, null, 2));
+  logger.info('IngestRequestReceived', requestSummary(event));
 
   try {
     // Handle GET request (webhook subscription verification)
@@ -25,7 +27,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       body: JSON.stringify({ error: 'Method not allowed' }),
     };
   } catch (error) {
-    console.error('Error handling ingest:', error);
+    logger.error('IngestFailed', error);
 
     // Details are logged above; don't return them to the caller
     return {
@@ -44,7 +46,6 @@ function handleVerification(event: APIGatewayProxyEvent): APIGatewayProxyResult 
   const token = params['hub.verify_token'];
   const challenge = params['hub.challenge'];
 
-  console.log('Webhook verification request:', { mode, token, challenge });
 
   if (!mode || !token || !challenge) {
     return {
@@ -54,8 +55,8 @@ function handleVerification(event: APIGatewayProxyEvent): APIGatewayProxyResult 
   }
 
   // Verify the token matches
-  if (mode === 'subscribe' && token === process.env.STRAVA_VERIFY_TOKEN) {
-    console.log('Webhook verified successfully');
+  if (mode === 'subscribe' && token === requireEnv('STRAVA_VERIFY_TOKEN')) {
+    logger.info('WebhookVerified');
 
     return {
       statusCode: 200,
@@ -64,7 +65,7 @@ function handleVerification(event: APIGatewayProxyEvent): APIGatewayProxyResult 
     };
   }
 
-  console.error('Webhook verification failed: invalid verify token');
+  logger.warn('WebhookVerificationFailed', { mode });
 
   return {
     statusCode: 403,
@@ -96,12 +97,17 @@ async function handleWebhookIngest(
     };
   }
 
-  console.log('Ingesting webhook event:', webhookEvent);
+  logger.info('WebhookEventReceived', {
+    objectType: webhookEvent.object_type,
+    aspectType: webhookEvent.aspect_type,
+    objectId: webhookEvent.object_id,
+    ownerId: webhookEvent.owner_id,
+  });
 
   // 2. Filter events early
   // We only care about 'activity' objects and 'create' or 'update' aspects
   if (webhookEvent.object_type !== 'activity') {
-    console.log('Ignoring non-activity event:', webhookEvent.object_type);
+    logger.info('WebhookEventIgnored', { reason: 'not an activity', objectType: webhookEvent.object_type });
     return {
       statusCode: 200,
       body: JSON.stringify({ message: 'Event ignored (not an activity)' }),
@@ -109,7 +115,7 @@ async function handleWebhookIngest(
   }
 
   if (webhookEvent.aspect_type === 'delete') {
-    console.log('Ignoring delete event');
+    logger.info('WebhookEventIgnored', { reason: 'delete' });
     return {
       statusCode: 200,
       body: JSON.stringify({ message: 'Event ignored (delete)' }),
@@ -118,7 +124,7 @@ async function handleWebhookIngest(
 
   // Also double check it is create or update, just in case
   if (webhookEvent.aspect_type !== 'create' && webhookEvent.aspect_type !== 'update') {
-    console.log('Ignoring unknown aspect type:', webhookEvent.aspect_type);
+    logger.info('WebhookEventIgnored', { reason: 'unknown aspect', aspectType: webhookEvent.aspect_type });
     return {
       statusCode: 200,
       body: JSON.stringify({ message: 'Event ignored (unknown aspect)' }),
@@ -128,18 +134,18 @@ async function handleWebhookIngest(
   try {
     // Send to SQS
     await sqs.send(new SendMessageCommand({
-      QueueUrl: process.env.QUEUE_URL,
+      QueueUrl: requireEnv('QUEUE_URL'),
       MessageBody: event.body, // Pass the raw JSON string
     }));
 
-    console.log('Event queued successfully');
+    logger.info('WebhookEventQueued', { objectId: webhookEvent.object_id });
 
     return {
       statusCode: 200,
       body: JSON.stringify({ message: 'Event queued for processing' }),
     };
   } catch (error) {
-    console.error('Error queuing event:', error);
+    logger.error('WebhookEventQueueFailed', error, { objectId: webhookEvent.object_id });
     // Even if queuing fails, we might want to return 500 so Strava retries
     return {
       statusCode: 500,

@@ -24,7 +24,6 @@ import {
 vi.mock('../strava.js', () => ({
   getActivity: vi.fn(),
   updateActivity: vi.fn(),
-  updateActivityDescription: vi.fn(),
   getValidAccessToken: vi.fn(),
 }));
 

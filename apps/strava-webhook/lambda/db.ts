@@ -6,6 +6,7 @@ import { randomBytes } from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 import type { StravaUser, OAuthState } from './types.js';
+import { logger } from './logger.js';
 
 const client = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(client);
@@ -28,7 +29,7 @@ export async function getUser(athleteId: number): Promise<StravaUser | null> {
 
     return (result.Item as StravaUser) || null;
   } catch (error) {
-    console.error('Error getting user from DynamoDB:', error);
+    logger.warn('DynamoGetUserFailed', { athleteId, error: String(error) });
     throw error;
   }
 }
@@ -45,7 +46,7 @@ export async function saveUser(user: StravaUser): Promise<void> {
       })
     );
   } catch (error) {
-    console.error('Error saving user to DynamoDB:', error);
+    logger.warn('DynamoSaveUserFailed', { athleteId: user.athlete_id, error: String(error) });
     throw error;
   }
 }
@@ -126,7 +127,7 @@ export async function createOAuthState(): Promise<string> {
 
     return state;
   } catch (error) {
-    console.error('Error saving OAuth state to DynamoDB:', error);
+    logger.warn('DynamoSaveOAuthStateFailed', { error: String(error) });
     throw error;
   }
 }
@@ -162,18 +163,18 @@ export async function validateAndConsumeOAuthState(state: string): Promise<boole
     );
 
     // If we get here, the delete succeeded - state was valid
-    console.log('OAuth state validated and consumed:', state.substring(0, 8) + '...');
+    logger.info('OAuthStateConsumed', { statePrefix: state.substring(0, 8) });
     return true;
-  } catch (error: any) {
+  } catch (error: unknown) {
     // ConditionalCheckFailedException means state was invalid (missing or expired)
-    if (error.name === 'ConditionalCheckFailedException') {
-      console.warn('OAuth state validation failed (not found or expired):', state.substring(0, 8) + '...');
+    if ((error as { name?: string } | null)?.name === 'ConditionalCheckFailedException') {
+      logger.warn('OAuthStateInvalid', { statePrefix: state.substring(0, 8), reason: 'not found or expired' });
       return false;
     }
 
-    // Other errors (throttling, service issues) - log and return false
-    // This prevents exposing internal errors to users via the OAuth flow
-    console.error('DynamoDB error during OAuth state validation:', error);
-    throw error; // Re-throw to allow caller to handle service errors differently
+    // Other errors (throttling, service issues): rethrow so the caller can show
+    // a "try again" page rather than a security error
+    logger.warn('DynamoValidateOAuthStateFailed', { error: String(error) });
+    throw error;
   }
 }
