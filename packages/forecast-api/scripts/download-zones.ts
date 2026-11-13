@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TMP_DIR = path.join(__dirname, '../data/zones/tmp');
 const ZONES_DIR = path.join(__dirname, '../data/zones');
+const ZONE_MAP_URL = 'https://api.avalanche.state.co.us/api/v2/zones/map';
 
 async function downloadCaicZones() {
     const caicFile = path.join(TMP_DIR, 'CAIC-zones.json');
@@ -18,7 +19,7 @@ async function downloadCaicZones() {
         const forecastZones = zones.filter((z: any) =>
             z.type === 'backcountry_zone' &&
             z.category === 'backcountry' &&
-            z.geojson_url
+            z.id
         );
 
         console.log(`Found ${forecastZones.length} CAIC backcountry zones.`);
@@ -31,7 +32,10 @@ async function downloadCaicZones() {
             console.log(`Downloading ${zone.title} (${zone.slug})...`);
 
             try {
-                const response = await fetch(zone.geojson_url);
+                // Download by ID, not by the slug in geojson_url: slugs aren't
+                // unique (Grand Mesa is also a highway zone), and the slug URL
+                // for grand-mesa returns 404 (#41)
+                const response = await fetch(`${ZONE_MAP_URL}/${zone.id}.geojson`);
                 if (!response.ok) {
                     console.error(`Failed to fetch ${zone.slug}: ${response.status}`);
                     continue;

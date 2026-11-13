@@ -19,7 +19,7 @@ describe('Zone Lookup', () => {
     it('should load all zones', async () => {
       const zones = await loadZones();
       expect(zones.length).toBe(ZONE_CONFIGS.length);
-      expect(zones.length).toBe(28);
+      expect(zones.length).toBe(29);
     });
 
     it('should have correct zone properties', async () => {
@@ -36,7 +36,7 @@ describe('Zone Lookup', () => {
     it('should load MultiPolygon zones without error', async () => {
       const zones = await loadZones();
       const multiPolygonZones = zones.filter(z => z.boundary.geometry.type === 'MultiPolygon');
-      expect(multiPolygonZones.length).toBe(10);
+      expect(multiPolygonZones.length).toBe(11);
 
       // Verify specific CAIC MultiPolygon zone (Front Range = 3001) and UAC MultiPolygon (Southwest = 2007)
       const frontRange = zones.find(z => z.id === 3001);
@@ -153,6 +153,12 @@ describe('Zone Lookup', () => {
           coordinate: { latitude: 39.481, longitude: -106.038 },
           expectedZoneId: 3009,
           expectedZoneName: 'Vail & Summit County',
+        },
+        {
+          name: 'CAIC Grand Mesa (Mesa Lakes, #41)',
+          coordinate: { latitude: 39.048, longitude: -108.085 },
+          expectedZoneId: 3002,
+          expectedZoneName: 'Grand Mesa',
         },
         // Utah (UAC) zones
         {

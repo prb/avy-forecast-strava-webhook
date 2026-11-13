@@ -20,7 +20,7 @@ CAIC Northern San Juan Zone forecast: 2🟨/1🟩/1🟩 (https://avalanche.state
 
 NWAC and CAIC forecasts show upper/middle/lower elevation-band ratings. avalanche.org publishes only an overall rating for UAC, so UAC shows one rating.
 
-CAIC forecasts come from the API behind CAIC's own forecast map (AvID), which isn't a documented public API. CAIC's forecast areas change from day to day and have no names, so the line is named after the Colorado region the activity started in. The link opens CAIC's forecast for that day at a fixed point inside the forecast area, not at the activity's start, so it doesn't reveal locations hidden by Strava privacy zones. Activities that start in a region but outside every CAIC forecast area that day get no forecast. Grand Mesa isn't covered yet (#41).
+CAIC forecasts come from the API behind CAIC's own forecast map (AvID), which isn't a documented public API. CAIC's forecast areas change from day to day and have no names, so the line is named after the Colorado region the activity started in. The link opens CAIC's forecast for that day at a fixed point inside the forecast area, not at the activity's start, so it doesn't reveal locations hidden by Strava privacy zones. Activities that start in a region but outside every CAIC forecast area that day get no forecast.
 
 ## Quick Start
 
