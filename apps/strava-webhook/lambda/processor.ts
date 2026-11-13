@@ -13,29 +13,10 @@
 
 import type { SQSBatchItemFailure, SQSBatchResponse, SQSEvent, SQSHandler } from 'aws-lambda';
 import type { StravaWebhookEvent } from './types.js';
+import { logger } from './logger.js';
 import { getActivity, updateActivity } from './strava.js';
 import { getForecastForCoordinate } from '@multifarious/forecast-api';
 import { formatForecast } from '@multifarious/forecast-formatter';
-
-/**
- * Structured Logger Helper
- */
-const logger = {
-  info: (event: string, data: Record<string, any> = {}) => {
-    console.log(JSON.stringify({ level: 'INFO', event, ...data }));
-  },
-  error: (event: string, error: any, data: Record<string, any> = {}) => {
-    console.error(
-      JSON.stringify({
-        level: 'ERROR',
-        event,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        ...data,
-      })
-    );
-  },
-};
 
 /**
  * Main Lambda handler for SQS
@@ -113,21 +94,14 @@ async function processActivity(
   const hasCommand = activity.name.includes('#avy_forecast');
 
   // Determine if we should process this activity
-  let shouldProcess = false;
   if (aspectType === 'create' && activity.type === 'BackcountrySki') {
     // Auto-process BackcountrySki activities on creation
-    shouldProcess = true;
     logger.info('ProcessingCriteriaMet', { ...logContext, reason: 'Auto-process BackcountrySki' });
   } else if (aspectType === 'update' && hasCommand) {
     // Process any activity with #avy_forecast command on update
-    shouldProcess = true;
     logger.info('ProcessingCriteriaMet', { ...logContext, reason: 'Manual command #avy_forecast' });
   } else {
     logger.info('ProcessingSkipped', { ...logContext, reason: 'Criteria not met' });
-    return;
-  }
-
-  if (!shouldProcess) {
     return;
   }
 

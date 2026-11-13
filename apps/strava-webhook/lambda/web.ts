@@ -8,6 +8,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { logger, requestSummary } from './logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -27,7 +28,7 @@ function getLogoSvg(): string {
     }
     return content;
   } catch (error) {
-    console.warn('Could not load custom logo.svg, using default.', error);
+    logger.warn('CustomLogoUnavailable', { error: String(error) });
     return DEFAULT_LOGO;
   }
 }
@@ -35,8 +36,8 @@ function getLogoSvg(): string {
 /**
  * Main Lambda handler
  */
-export async function handler(_event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  console.log('Web UI handler invoked');
+export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
+  logger.info('WebRequestReceived', requestSummary(event));
 
   const logoSvg = getLogoSvg();
 
