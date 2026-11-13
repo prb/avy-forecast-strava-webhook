@@ -36,8 +36,8 @@ export interface DangerRating {
  * Avalanche forecast product from avalanche.org API
  */
 export interface ForecastProduct {
-  /** Unique product ID */
-  id: number;
+  /** Unique product ID (numeric on avalanche.org; a UUID string for CAIC's AvID forecasts) */
+  id: number | string;
   /** Product type (e.g., "forecast", "summary") */
   product_type: string;
   /** Publication timestamp */
@@ -126,7 +126,7 @@ export interface ForecastResponseZone {
 export interface ForecastResponse {
   zone: ForecastResponseZone;
   forecast: {
-    product_id: number;
+    product_id: number | string;
     date: string;
     published_time: string;
     danger_rating: number;

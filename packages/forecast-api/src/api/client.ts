@@ -89,6 +89,8 @@ export async function fetchForecastForZone(
  *   (the same address NWAC redirects /forecasts/avalanche/{zone}/{date} to)
  * - UAC: the dated forecast page, e.g.
  *   https://utahavalanchecenter.org/forecast/salt-lake/2/16/2026
+ * - CAIC: the link built when the AvID forecast was converted (see
+ *   caic/forecast.ts), carried as the zone URL
  * - Other centers: the zone's forecast page as reported by avalanche.org,
  *   falling back to the center's home page
  *
