@@ -11,9 +11,11 @@ import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 vi.mock('@aws-sdk/client-sqs', () => {
     const sendMock = vi.fn();
     return {
-        SQSClient: vi.fn(() => ({
-            send: sendMock,
-        })),
+        // A function, not an arrow: vitest 4+ mocks are only constructible
+        // with `new` when their implementation is
+        SQSClient: vi.fn(function () {
+            return { send: sendMock };
+        }),
         SendMessageCommand: vi.fn(),
         __sendMock: sendMock,
     };

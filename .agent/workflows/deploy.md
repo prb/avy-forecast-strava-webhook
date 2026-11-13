@@ -17,11 +17,12 @@ To deploy the production environment, we use the `npm run deploy` script in the 
    ```bash
    npm run clean && npm install
    ```
-2. **Build and Test**:
-   Ensure all packages are built and tests pass before deploying.
+2. **Build, Test and Audit**:
+   Ensure all packages are built, tests pass and there are no high or critical dependency advisories before deploying.
    ```bash
    npm run build
    npm test
+   npm run audit
    ```
 3. **Deploy**:
    Navigate to the root or use workspace flag:
