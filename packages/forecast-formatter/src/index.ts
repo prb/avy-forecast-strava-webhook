@@ -112,6 +112,19 @@ function formatDangerForDay(product: ForecastProduct, day: 'current' | 'tomorrow
 const FORECAST_LINE = /^(?:(?:NWAC|UAC|CAIC) .+ Zone forecast: .*|.*https:\/\/nwac\.us\/avalanche-forecast\/#\/forecast\/.*)$/;
 
 /**
+ * Matches the note added when a refresh found no forecast,
+ * e.g. "[No avalanche forecast available: No forecast available for Mt Hood]"
+ */
+const NO_FORECAST_NOTE = /^\[No avalanche forecast available: .*\]\s*$/;
+
+/**
+ * Format the note added when a refresh found no forecast
+ */
+export function formatNoForecastNote(reason: string): string {
+  return `[No avalanche forecast available: ${reason}]`;
+}
+
+/**
  * Split a description into lines. Descriptions edited in Strava use CRLF line
  * endings, and `.` in FORECAST_LINE doesn't match a trailing `\r` (#71).
  */
@@ -127,8 +140,8 @@ export function hasForecastLine(description: string): boolean {
 }
 
 /**
- * Remove every forecast line added by this service, wherever it appears,
- * and tidy the blank lines left behind
+ * Remove every forecast line and "no forecast" note added by this service,
+ * wherever it appears, and tidy the blank lines left behind
  *
  * Keeps CRLF line endings if the description uses them.
  */
@@ -136,7 +149,7 @@ export function removeForecastLines(description: string): string {
   const eol = description.includes('\r\n') ? '\r\n' : '\n';
   const lines: string[] = [];
   for (const line of splitLines(description)) {
-    if (FORECAST_LINE.test(line)) {
+    if (FORECAST_LINE.test(line) || NO_FORECAST_NOTE.test(line)) {
       continue;
     }
     // Collapse runs of blank lines to one

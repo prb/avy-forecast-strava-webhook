@@ -5,6 +5,7 @@ import {
   formatForecast,
   getDangerLevelName,
   hasForecastLine,
+  formatNoForecastNote,
   removeForecastLines,
 } from './index.js';
 import type { ForecastProduct, DangerRating } from '@multifarious/forecast-api';
@@ -284,6 +285,22 @@ describe('Forecast Formatter', () => {
 
     it('should leave descriptions without forecasts unchanged', () => {
       expect(removeForecastLines('Line one\n\nLine two')).toBe('Line one\n\nLine two');
+    });
+
+    it('should remove "no forecast" notes too, so a refresh does not repeat them', () => {
+      const note = '[No avalanche forecast available: No forecast available for West Slopes South]';
+      expect(removeForecastLines(`Lovely day out.\r\n\r\n${note}\n\n${note}`)).toBe('Lovely day out.');
+      expect(hasForecastLine(`Lovely day out.\n\n${note}`)).toBe(false);
+    });
+
+    it('should format the "no forecast" note', () => {
+      expect(formatNoForecastNote('Activity has no location data')).toBe(
+        '[No avalanche forecast available: Activity has no location data]'
+      );
+    });
+
+    it('should not remove other bracketed text', () => {
+      expect(removeForecastLines('[updated] Notes\n\n[No forecast checked]')).toBe('[updated] Notes\n\n[No forecast checked]');
     });
 
     describe('with CRLF line endings, as Strava saves edited descriptions (#71)', () => {
