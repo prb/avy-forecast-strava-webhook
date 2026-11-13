@@ -112,23 +112,40 @@ function formatDangerForDay(product: ForecastProduct, day: 'current' | 'tomorrow
 const FORECAST_LINE = /^(?:(?:NWAC|UAC|CAIC) .+ Zone forecast: .*|.*https:\/\/nwac\.us\/avalanche-forecast\/#\/forecast\/.*)$/;
 
 /**
+ * Split a description into lines. Descriptions edited in Strava use CRLF line
+ * endings, and `.` in FORECAST_LINE doesn't match a trailing `\r` (#71).
+ */
+function splitLines(description: string): string[] {
+  return description.split(/\r?\n/);
+}
+
+/**
  * Whether a description already contains a forecast line added by this service
  */
 export function hasForecastLine(description: string): boolean {
-  return description.split('\n').some(line => FORECAST_LINE.test(line));
+  return splitLines(description).some(line => FORECAST_LINE.test(line));
 }
 
 /**
  * Remove every forecast line added by this service, wherever it appears,
  * and tidy the blank lines left behind
+ *
+ * Keeps CRLF line endings if the description uses them.
  */
 export function removeForecastLines(description: string): string {
-  return description
-    .split('\n')
-    .filter(line => !FORECAST_LINE.test(line))
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  const eol = description.includes('\r\n') ? '\r\n' : '\n';
+  const lines: string[] = [];
+  for (const line of splitLines(description)) {
+    if (FORECAST_LINE.test(line)) {
+      continue;
+    }
+    // Collapse runs of blank lines to one
+    if (line.trim() === '' && lines.length > 0 && lines[lines.length - 1].trim() === '') {
+      continue;
+    }
+    lines.push(line);
+  }
+  return lines.join(eol).trim();
 }
 
 /**

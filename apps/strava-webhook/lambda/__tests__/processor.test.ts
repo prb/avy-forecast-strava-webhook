@@ -572,6 +572,32 @@ describe('Webhook Handler', () => {
       expect(updates.description).toBe(expectedMtHoodForecastText);
     });
 
+    it('should replace every forecast line in a CRLF description, not just the last (#71)', async () => {
+      const event = createSQSEvent(mockUpdateWebhookEvent);
+      // Edited in Strava (CRLF), with a line added below the old forecast and
+      // the copy an earlier refresh appended with \n
+      vi.mocked(strava.getActivity).mockResolvedValue({
+        ...mockBackcountryActivity,
+        name: 'Mt Hood Tour #avy_forecast',
+        description:
+          'Great powder day!\r\n\r\n' +
+          'NWAC Mt Hood Zone forecast: 2🟨/2🟨/1🟩 (https://nwac.us/avalanche-forecast/#/forecast/10/166377)\r\n\r\n' +
+          '⛰️ Mount Hood | 🌐 summitbag.com\n\n' +
+          'NWAC Mt Hood Zone forecast: 2🟨/2🟨/1🟩 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166377)',
+      });
+      vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue({
+        zone: { id: 1657, zone_id: '10', name: 'Mt Hood', center_id: 'NWAC' },
+        product: mockMtHoodForecast,
+      } as ForecastProductResponse as any);
+
+      await handler(event, {} as any, {} as any);
+
+      const updates = vi.mocked(strava.updateActivity).mock.calls[0][2];
+      expect(updates.description).toBe(
+        `Great powder day!\r\n\r\n⛰️ Mount Hood | 🌐 summitbag.com\n\n${expectedMtHoodForecastText}`
+      );
+    });
+
     it('should format UAC forecasts with the UAC prefix and zone URL (#53)', async () => {
       const event = createSQSEvent(mockWebhookEvent);
       vi.mocked(strava.getActivity).mockResolvedValue({
