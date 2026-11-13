@@ -37,6 +37,23 @@ describe('logger', () => {
     expect(JSON.parse(warn.mock.calls[0][0])).toEqual({ level: 'WARN', event: 'Careful' });
   });
 
+  it("doesn't let caller data override level, event, error or stack", () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const clash = { level: 'DEBUG', event: 'Other', error: 'masked', stack: 'fake', extra: 1 };
+
+    logger.info('Info', clash);
+    logger.warn('Warn', clash);
+    logger.error('Error', new Error('boom'), clash);
+
+    expect(JSON.parse(log.mock.calls[0][0])).toMatchObject({ level: 'INFO', event: 'Info', extra: 1 });
+    expect(JSON.parse(warn.mock.calls[0][0])).toMatchObject({ level: 'WARN', event: 'Warn', extra: 1 });
+    const line = JSON.parse(err.mock.calls[0][0]);
+    expect(line).toMatchObject({ level: 'ERROR', event: 'Error', error: 'boom', extra: 1 });
+    expect(line.stack).toContain('boom');
+  });
+
   it('summarizes requests without headers, body or query string', () => {
     const summary = requestSummary({
       httpMethod: 'GET',

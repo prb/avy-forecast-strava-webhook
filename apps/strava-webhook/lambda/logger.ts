@@ -3,7 +3,8 @@
  *
  * Each line is a single JSON object: `{ level, event, ...data }`. CloudWatch
  * Logs Insights queries and the processor's error metric filter
- * (`$.level = "ERROR"`) depend on this shape.
+ * (`$.level = "ERROR"`) depend on this shape, so `data` can't override
+ * `level`, `event`, or (for `error`) the `error`/`stack` fields.
  *
  * Convention: helper modules that log and then rethrow use `warn`; the handler
  * that finally handles the failure logs `error`, so each failure counts once
@@ -21,15 +22,15 @@ function errorFields(error: unknown): LogData {
 
 export const logger = {
   info(event: string, data: LogData = {}): void {
-    console.log(JSON.stringify({ level: 'INFO', event, ...data }));
+    console.log(JSON.stringify({ ...data, level: 'INFO', event }));
   },
 
   warn(event: string, data: LogData = {}): void {
-    console.warn(JSON.stringify({ level: 'WARN', event, ...data }));
+    console.warn(JSON.stringify({ ...data, level: 'WARN', event }));
   },
 
   error(event: string, error: unknown, data: LogData = {}): void {
-    console.error(JSON.stringify({ level: 'ERROR', event, ...errorFields(error), ...data }));
+    console.error(JSON.stringify({ ...data, level: 'ERROR', event, ...errorFields(error) }));
   },
 };
 
