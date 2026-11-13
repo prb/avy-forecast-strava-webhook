@@ -44,6 +44,20 @@ describe('Forecast Query', () => {
       }
     }, 15000);
 
+    it('should get a CAIC forecast from AvID, linked to a point inside the forecast area (#52)', async () => {
+      // Northern San Juans, the example from #52
+      const coordinate: Coordinate = { latitude: 37.878914, longitude: -107.81559 };
+
+      const result = await getForecastForCoordinate(coordinate, '2026-02-16', { includeProduct: true, useCache: false });
+
+      expect(result.zone).toEqual({ id: 3004, zone_id: 'northern-san-juan', name: 'Northern San Juan', center_id: 'CAIC' });
+      expect(result.product?.danger?.[0]).toEqual({ upper: 2, middle: 1, lower: 1, valid_day: 'current' });
+      const url = result.product?.forecast_zone[0].url ?? '';
+      expect(url).toMatch(/^https:\/\/avalanche\.state\.co\.us\/\?lat=-?\d+(\.\d{1,3})?&lng=-?\d+(\.\d{1,3})?&date=2026-02-16$/);
+      // Not the activity's own location
+      expect(url).not.toContain('37.878914');
+    }, 30000);
+
     it('should return error for coordinates outside all zones', async () => {
       const coordinate: Coordinate = {
         latitude: 47.6062, // Seattle

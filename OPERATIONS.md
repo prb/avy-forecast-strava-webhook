@@ -57,7 +57,7 @@ This guide covers deployment, monitoring, and operational procedures for the Str
 
 2. **Review changes**
    ```bash
-   cd deploy --context environment=prod
+   cdk diff --context environment=prod
    ```
 
 3. **Deploy the stack**

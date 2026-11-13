@@ -196,6 +196,35 @@ describe('Forecast Formatter', () => {
       );
     });
 
+    it('should format a CAIC forecast with its link (#52)', () => {
+      // Shape of a product converted from CAIC's AvID API: the link is the zone URL
+      const caicProduct: ForecastProduct = {
+        ...mockProduct,
+        id: '0a8bda19-d9b9-40f2-84f0-5371cabdc7ff',
+        danger_rating: 2,
+        danger: [
+          { upper: 2, middle: 1, lower: 1, valid_day: 'current' },
+          { upper: 3, middle: 2, lower: 2, valid_day: 'tomorrow' },
+        ],
+        avalanche_center: { id: 'CAIC', name: 'Colorado Avalanche Information Center', url: 'https://avalanche.state.co.us/' },
+        forecast_zone: [
+          {
+            id: 3004,
+            zone_id: 'northern-san-juan',
+            name: 'Northern San Juan',
+            url: 'https://avalanche.state.co.us/?lat=37.898&lng=-107.86&date=2026-02-16',
+            config: null,
+          },
+        ],
+      };
+
+      const line = formatForecast(caicProduct, { center: 'CAIC' });
+      expect(line).toBe(
+        'CAIC Northern San Juan Zone forecast: 2🟨/1🟩/1🟩 (https://avalanche.state.co.us/?lat=37.898&lng=-107.86&date=2026-02-16)'
+      );
+      expect(hasForecastLine(`Great day!\n\n${line}`)).toBe(true);
+    });
+
     it('should honor includeCenter: false', () => {
       expect(formatForecast(mockProduct, { includeCenter: false })).toMatch(/^Mt Hood Zone forecast: /);
     });

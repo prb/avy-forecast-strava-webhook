@@ -57,7 +57,7 @@ describe('Avalanche.org API Client', () => {
         return;
       }
 
-      const productId = products[0].id;
+      const productId = products[0].id as number; // avalanche.org IDs are numeric
       const product = await fetchProduct(productId);
 
       expect(product).toBeDefined();

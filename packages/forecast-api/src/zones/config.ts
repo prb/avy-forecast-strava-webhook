@@ -23,10 +23,11 @@ export type AvalancheCenterId = 'NWAC' | 'UAC' | 'CAIC';
  *
  * - UAC: supported since #53. avalanche.org doesn't publish the Abajos or
  *   Southwest zones, so those return "no forecast available".
- * - CAIC: not supported; avalanche.org sub-zones don't map onto our
- *   boundaries (#52)
+ * - CAIC: supported since #52, from CAIC's own AvID API rather than
+ *   avalanche.org (whose CAIC sub-zones don't map onto our boundaries).
+ *   Our regional boundaries only name the zone; see caic/forecast.ts.
  */
-export const SUPPORTED_CENTERS: ReadonlySet<AvalancheCenterId> = new Set(['NWAC', 'UAC']);
+export const SUPPORTED_CENTERS: ReadonlySet<AvalancheCenterId> = new Set(['NWAC', 'UAC', 'CAIC']);
 
 export interface ZoneConfig {
   id: number;

@@ -195,7 +195,7 @@ export async function handler(_event: APIGatewayProxyEvent): Promise<APIGatewayP
             <div class="emoji">🏔️⛷️</div>
             <h1>Avy Forecast Webhook</h1>
             <p class="subtitle">
-              Automatically add avalanche forecasts to your Strava backcountry ski activities in areas covered by NWAC and UAC.
+              Automatically add avalanche forecasts to your Strava backcountry ski activities in areas covered by NWAC, UAC and CAIC.
             </p>
 
             <div class="feature-list">

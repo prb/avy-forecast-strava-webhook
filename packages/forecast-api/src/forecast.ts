@@ -2,6 +2,9 @@ import { findZoneForCoordinate } from './zones/index.js';
 import { SUPPORTED_CENTERS } from './zones/config.js';
 import { fetchForecastForZone, buildForecastUrl } from './api/index.js';
 import { getCache, getCachedZoneForecast, cacheZoneForecast } from './cache/index.js';
+import { getCachedCaicForecasts, cacheCaicForecasts } from './cache/caic-forecast.js';
+import { fetchCaicForecasts, type CaicDayForecasts } from './caic/avid.js';
+import { findCaicForecast, toCaicForecastProduct } from './caic/forecast.js';
 import type {
   Coordinate,
   ForecastResponseZone,
@@ -70,6 +73,23 @@ export async function getForecastForCoordinate(
     };
   }
 
+  // CAIC: one statewide fetch per date, then find the point's forecast area
+  if (zone.center_id === 'CAIC') {
+    try {
+      const product = await getCaicProduct(zone, coordinate, date, useCache);
+      return includeProduct
+        ? buildForecastProductResponse(toResponseZone(zone), product)
+        : buildForecastResponse(toResponseZone(zone), product);
+    } catch (error) {
+      return {
+        zone: toResponseZone(zone),
+        forecast: null,
+        product: null,
+        error: error instanceof Error ? error.message : 'Unknown error fetching forecast',
+      };
+    }
+  }
+
   // Step 2: Try cache first (if enabled)
   if (useCache) {
     try {
@@ -115,6 +135,56 @@ export async function getForecastForCoordinate(
       error: error instanceof Error ? error.message : 'Unknown error fetching forecast',
     };
   }
+}
+
+/**
+ * Get CAIC's forecast for a point in one of our CAIC regions
+ *
+ * CAIC's forecast areas don't line up with our regions and change daily, so
+ * the whole state's areas and forecasts are cached per date and the point's
+ * area is found after reading (#52). Points in a region but outside every
+ * area get no forecast.
+ *
+ * @returns The forecast, or null if there's none for the point and date
+ * @throws If CAIC's data can't be fetched or converted
+ */
+async function getCaicProduct(
+  zone: ZoneWithBoundary,
+  coordinate: Coordinate,
+  date: string,
+  useCache: boolean
+): Promise<ForecastProduct | null> {
+  let day: CaicDayForecasts | null = null;
+
+  if (useCache) {
+    try {
+      const cached = await getCachedCaicForecasts(getCache(), date);
+      if (cached) {
+        console.log(`Cache HIT for CAIC, date ${date} (${cached.reason})`);
+        day = cached.value;
+      } else {
+        console.log(`Cache MISS for CAIC, date ${date}`);
+      }
+    } catch (error) {
+      console.error('Cache read error:', error);
+    }
+  }
+
+  if (!day) {
+    day = await fetchCaicForecasts(date);
+
+    if (useCache) {
+      try {
+        await cacheCaicForecasts(getCache(), date, day);
+        console.log(`Cached CAIC forecasts for date ${date}: ${day.forecasts.length} forecasts, ${day.areas.features.length} areas`);
+      } catch (error) {
+        console.error('Cache write error:', error);
+      }
+    }
+  }
+
+  const match = findCaicForecast(day, coordinate);
+  return match ? toCaicForecastProduct(zone, match.area, match.forecast, date) : null;
 }
 
 /**

@@ -8,6 +8,7 @@ the key, the expiry and whether a value is worth caching (#61).
 
 - **Generic store**: `CacheStore` with `get<T>(key)`, `set<T>(key, value, { expiresAt, reason })`, `delete(key)`, `clear()`
 - **Zone forecast helpers** (`zone-forecast.ts`): avalanche.org forecasts keyed by zone and date
+- **CAIC helpers** (`caic-forecast.ts`): CAIC's statewide AvID areas and forecasts keyed by date (`caic-v1-date-YYYY-MM-DD`), stored as fetched and converted on read. A date with no areas or forecasts is kept for 60 minutes only (#52)
 - **Read-through cache**: Automatic cache population on miss
 - **Smart TTL** (zone forecasts):
   - Recent forecasts (≤72 hours old): 60 minute cache
