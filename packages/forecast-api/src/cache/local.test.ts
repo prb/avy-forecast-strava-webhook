@@ -1,170 +1,153 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { LocalCacheStore } from './local.js';
-import { getCacheKey } from './types.js';
-import { rm } from 'fs/promises';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import type { ForecastProduct } from '../types/index.js';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { LocalCacheStore } from './local.js';
+
+const PERMANENT = { expiresAt: null };
 
 describe('LocalCacheStore', () => {
-  const testCacheDir = '/tmp/nwac-cache-test';
+  let testCacheDir: string;
   let cache: LocalCacheStore;
 
   beforeEach(async () => {
+    testCacheDir = await mkdtemp(join(tmpdir(), 'local-cache-test-'));
     cache = new LocalCacheStore(testCacheDir);
-    // Clean up before each test
-    if (existsSync(testCacheDir)) {
-      await rm(testCacheDir, { recursive: true, force: true });
-    }
+    // Failures are logged by design; keep test output readable
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(async () => {
-    // Clean up after each test
-    if (existsSync(testCacheDir)) {
-      await rm(testCacheDir, { recursive: true, force: true });
-    }
+    vi.restoreAllMocks();
+    await rm(testCacheDir, { recursive: true, force: true });
   });
 
   describe('set and get', () => {
-    it('should cache and retrieve a forecast', async () => {
-      const zoneId = 1648;
-      const date = '2025-01-15';
-      const mockForecast: ForecastProduct = {
-        id: 12345,
-        product_type: 'forecast',
-        start_date: '2025-01-15',
-        end_date: '2025-01-16',
-        published_time: '2025-01-15T01:00:00Z',
-        expires_time: '2025-01-16T01:00:00Z',
-        danger_rating: 2,
-        bottom_line: 'Moderate danger',
-        hazard_discussion: null,
-        weather_discussion: null,
-        status: 'published',
-        author: 'Test',
-        avalanche_center: {
-          name: 'NWAC',
-        },
-        forecast_zone: [
-          {
-            id: 1648,
-            zone_id: '6',
-            name: 'West Slopes South',
-            url: 'http://example.com',
-            config: null,
-          },
-        ],
-      };
+    it('stores and reads values of different types', async () => {
+      const bundle = { areas: [{ id: 'a1' }], products: [{ areaId: 'a1', rating: 'low' }] };
 
-      await cache.set(zoneId, date, mockForecast);
-      const cached = await cache.get(zoneId, date);
+      await cache.set('object-key', bundle, PERMANENT);
+      await cache.set('string-key', 'hello', PERMANENT);
+      await cache.set('null-key', null, PERMANENT);
 
-      expect(cached).not.toBeNull();
-      expect(cached!.forecast).toEqual(mockForecast);
-      expect(cached!.cachedAt).toBeDefined();
-      expect(cached!.reason).toBeDefined();
+      expect((await cache.get<typeof bundle>('object-key'))?.value).toEqual(bundle);
+      expect((await cache.get<string>('string-key'))?.value).toBe('hello');
+
+      const nullEntry = await cache.get<null>('null-key');
+      expect(nullEntry).not.toBeNull();
+      expect(nullEntry!.value).toBeNull();
     });
 
-    it('should cache negative results (no forecast found)', async () => {
-      const zoneId = 1648;
-      const date = '2030-01-01';
+    it('records when and why an entry was cached', async () => {
+      const expiresAt = new Date(Date.now() + 60_000);
 
-      await cache.set(zoneId, date, null);
-      const cached = await cache.get(zoneId, date);
+      await cache.set('key', 1, { expiresAt, reason: 'test reason' });
+      const entry = await cache.get<number>('key');
 
-      expect(cached).not.toBeNull();
-      expect(cached!.forecast).toBeNull();
+      expect(entry!.cachedAt).toBeDefined();
+      expect(entry!.expiresAt).toBe(expiresAt.toISOString());
+      expect(entry!.reason).toBe('test reason');
     });
 
-    it('should return null for cache miss', async () => {
-      const cached = await cache.get(1648, '2025-01-15');
-      expect(cached).toBeNull();
+    it('stores entries as <key>.json in the cache directory', async () => {
+      await cache.set('v2-zone-1649-date-2026-02-16', null, PERMANENT);
+      expect(existsSync(join(testCacheDir, 'v2-zone-1649-date-2026-02-16.json'))).toBe(true);
+    });
+
+    it('returns null for a cache miss', async () => {
+      expect(await cache.get('missing')).toBeNull();
     });
   });
 
-  describe('TTL and expiration', () => {
-    it('should expire old entries for recent forecasts', async () => {
-      const zoneId = 1648;
-      // Set a forecast date that will have 60 minute TTL
-      const forecastDate = new Date();
-      forecastDate.setDate(forecastDate.getDate() - 1); // Yesterday
-      const date = forecastDate.toISOString().split('T')[0];
-
-      await cache.set(zoneId, date, null);
-
-      // Manually modify the cached entry to make it expired
-      const cached = await cache.get(zoneId, date);
-      expect(cached).not.toBeNull();
-
-      // For now, just verify it was cached with an expiration
-      expect(cached!.expiresAt).not.toBeNull();
-    }, 10000);
-
-    it('should set permanent cache for old forecasts', async () => {
-      const zoneId = 1648;
-      const date = '2020-01-15'; // Very old forecast
-
-      await cache.set(zoneId, date, null);
-      const cached = await cache.get(zoneId, date);
-
-      expect(cached).not.toBeNull();
-      expect(cached!.expiresAt).toBeNull(); // Permanent cache
+  describe('expiration', () => {
+    it('keeps permanent entries', async () => {
+      await cache.set('key', 'value', PERMANENT);
+      expect((await cache.get('key'))?.expiresAt).toBeNull();
     });
+
+    it('drops and deletes expired entries', async () => {
+      await cache.set('key', 'value', { expiresAt: new Date(Date.now() - 1000) });
+
+      expect(await cache.get('key')).toBeNull();
+      expect(existsSync(join(testCacheDir, 'key.json'))).toBe(false);
+    });
+  });
+
+  describe('legacy entries', () => {
+    it('reads pre-#61 zone forecast entries stored under "forecast"', async () => {
+      const legacy = {
+        forecast: { id: 166672 },
+        cachedAt: '2025-01-20T12:00:00Z',
+        expiresAt: null,
+        reason: 'Old forecast - cached permanently',
+      };
+      await writeFile(join(testCacheDir, 'v2-zone-1648-date-2025-01-15.json'), JSON.stringify(legacy));
+
+      const entry = await cache.get<{ id: number }>('v2-zone-1648-date-2025-01-15');
+
+      expect(entry).toEqual({
+        value: { id: 166672 },
+        cachedAt: '2025-01-20T12:00:00Z',
+        expiresAt: null,
+        reason: 'Old forecast - cached permanently',
+      });
+    });
+
+    it('writes new entries under "value"', async () => {
+      await cache.set('key', 42, PERMANENT);
+      const stored = JSON.parse(await readFile(join(testCacheDir, 'key.json'), 'utf-8'));
+      expect(stored.value).toBe(42);
+      expect(stored).not.toHaveProperty('forecast');
+    });
+  });
+
+  describe('keys', () => {
+    it.each(['../escape', 'a/b', '', '..', 'has space'])(
+      'rejects unsafe key %j without throwing or writing outside the cache directory',
+      async key => {
+        await expect(cache.set(key, 'value', PERMANENT)).resolves.toBeUndefined();
+        expect(await cache.get(key)).toBeNull();
+        expect(existsSync(join(testCacheDir, '..', 'escape.json'))).toBe(false);
+      }
+    );
   });
 
   describe('delete', () => {
-    it('should delete a cached entry', async () => {
-      const zoneId = 1648;
-      const date = '2025-01-15';
+    it('deletes a cached entry', async () => {
+      await cache.set('key', null, PERMANENT);
+      expect(await cache.get('key')).not.toBeNull();
 
-      await cache.set(zoneId, date, null);
-      let cached = await cache.get(zoneId, date);
-      expect(cached).not.toBeNull();
-
-      await cache.delete(zoneId, date);
-      cached = await cache.get(zoneId, date);
-      expect(cached).toBeNull();
+      await cache.delete('key');
+      expect(await cache.get('key')).toBeNull();
     });
 
-    it('should not throw when deleting non-existent entry', async () => {
-      await expect(cache.delete(9999, '2025-01-01')).resolves.not.toThrow();
+    it('does not throw when deleting a missing entry', async () => {
+      await expect(cache.delete('missing')).resolves.toBeUndefined();
     });
   });
 
   describe('clear', () => {
-    it('should clear all cache entries', async () => {
-      await cache.set(1648, '2025-01-15', null);
-      await cache.set(1649, '2025-01-16', null);
-      await cache.set(1650, '2025-01-17', null);
-
-      // Verify entries exist
-      expect(await cache.get(1648, '2025-01-15')).not.toBeNull();
-      expect(await cache.get(1649, '2025-01-16')).not.toBeNull();
+    it('clears all cache entries', async () => {
+      await cache.set('a', 1, PERMANENT);
+      await cache.set('b', 2, PERMANENT);
 
       await cache.clear();
 
-      // Verify all entries are gone
-      expect(await cache.get(1648, '2025-01-15')).toBeNull();
-      expect(await cache.get(1649, '2025-01-16')).toBeNull();
-      expect(await cache.get(1650, '2025-01-17')).toBeNull();
+      expect(await cache.get('a')).toBeNull();
+      expect(await cache.get('b')).toBeNull();
     });
   });
 
   describe('error handling', () => {
-    it('should handle corrupted cache files gracefully', async () => {
-      const zoneId = 1648;
-      const date = '2025-01-15';
+    it('treats a corrupted file as a miss', async () => {
+      await writeFile(join(testCacheDir, 'key.json'), 'invalid json{{{', 'utf-8');
+      expect(await cache.get('key')).toBeNull();
+    });
 
-      // Write invalid JSON
-      await cache.set(zoneId, date, null);
-
-      // Manually corrupt the file
-      const { writeFile } = await import('fs/promises');
-      const filePath = `${testCacheDir}/${getCacheKey(zoneId, date)}.json`;
-      await writeFile(filePath, 'invalid json{{{', 'utf-8');
-
-      // Should return null, not throw
-      const cached = await cache.get(zoneId, date);
-      expect(cached).toBeNull();
+    it('treats JSON that is not a cache entry as a miss', async () => {
+      await writeFile(join(testCacheDir, 'key.json'), JSON.stringify({ hello: 'world' }), 'utf-8');
+      expect(await cache.get('key')).toBeNull();
     });
   });
 });

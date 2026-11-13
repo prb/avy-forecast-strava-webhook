@@ -1,7 +1,7 @@
 import { findZoneForCoordinate } from './zones/index.js';
 import { SUPPORTED_CENTERS } from './zones/config.js';
 import { fetchForecastForZone, buildForecastUrl } from './api/index.js';
-import { getCache } from './cache/index.js';
+import { getCache, getCachedZoneForecast, cacheZoneForecast } from './cache/index.js';
 import type {
   Coordinate,
   ForecastResponseZone,
@@ -73,14 +73,13 @@ export async function getForecastForCoordinate(
   // Step 2: Try cache first (if enabled)
   if (useCache) {
     try {
-      const cache = getCache();
-      const cached = await cache.get(zone.id, date);
+      const cached = await getCachedZoneForecast(getCache(), zone.id, date);
 
       if (cached) {
         console.log(`Cache HIT for zone ${zone.id}, date ${date} (${cached.reason})`);
         return includeProduct
-          ? buildForecastProductResponse(toResponseZone(zone), cached.forecast)
-          : buildForecastResponse(toResponseZone(zone), cached.forecast);
+          ? buildForecastProductResponse(toResponseZone(zone), cached.value)
+          : buildForecastResponse(toResponseZone(zone), cached.value);
       }
 
       console.log(`Cache MISS for zone ${zone.id}, date ${date}`);
@@ -97,8 +96,7 @@ export async function getForecastForCoordinate(
     // Step 4: Store in cache (both positive and negative results)
     if (useCache) {
       try {
-        const cache = getCache();
-        await cache.set(zone.id, date, product);
+        await cacheZoneForecast(getCache(), zone.id, date, product);
         console.log(`Cached forecast for zone ${zone.id}, date ${date}: ${product ? 'found' : 'not found'}`);
       } catch (error) {
         // Cache write errors shouldn't break the API - just log

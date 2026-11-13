@@ -1,11 +1,15 @@
 # Forecast Cache
 
-Smart caching layer for NWAC avalanche forecasts with TTL based on forecast age.
+A generic key/value cache (local files or S3) used for avalanche forecasts.
+The store only stores and reads JSON values under string keys; callers decide
+the key, the expiry and whether a value is worth caching (#61).
 
 ## Features
 
+- **Generic store**: `CacheStore` with `get<T>(key)`, `set<T>(key, value, { expiresAt, reason })`, `delete(key)`, `clear()`
+- **Zone forecast helpers** (`zone-forecast.ts`): avalanche.org forecasts keyed by zone and date
 - **Read-through cache**: Automatic cache population on miss
-- **Smart TTL**:
+- **Smart TTL** (zone forecasts):
   - Recent forecasts (≤72 hours old): 60 minute cache
   - Older forecasts (>72 hours old): Permanent cache
 - **Positive and negative caching**: Caches both "forecast found" and "no forecast" responses
@@ -61,7 +65,13 @@ AWS_SECRET_ACCESS_KEY=your-secret
 ### Programmatic
 
 ```typescript
-import { getCache, LocalCacheStore, S3CacheStore } from './cache/index.js';
+import {
+  getCache,
+  LocalCacheStore,
+  S3CacheStore,
+  getCachedZoneForecast,
+  cacheZoneForecast,
+} from './cache/index.js';
 
 // Use global cache (auto-configured from env)
 const cache = getCache();
@@ -70,10 +80,14 @@ const cache = getCache();
 const localCache = new LocalCacheStore('/tmp/my-cache');
 const s3Cache = new S3CacheStore('my-bucket', 'forecasts/');
 
-// Cache operations
-const cached = await cache.get(zoneId, date);
-await cache.set(zoneId, date, forecast);
-await cache.delete(zoneId, date);
+// Zone forecasts (key and TTL chosen for you)
+const cached = await getCachedZoneForecast(cache, zoneId, date); // cached?.value
+await cacheZoneForecast(cache, zoneId, date, forecast);
+
+// Anything else: choose your own key and expiry
+await cache.set('caic-v1-date-2026-02-16', bundle, { expiresAt: null, reason: 'historical' });
+const entry = await cache.get<typeof bundle>('caic-v1-date-2026-02-16');
+await cache.delete('caic-v1-date-2026-02-16');
 await cache.clear();
 ```
 
@@ -93,12 +107,17 @@ const result = await getForecastForCoordinate(coord, date, false);
 
 ```json
 {
-  "forecast": { /* ForecastProduct or null */ },
+  "value": { /* any JSON value, e.g. a ForecastProduct or null */ },
   "cachedAt": "2025-01-20T12:00:00Z",
   "expiresAt": "2025-01-20T13:00:00Z", // or null for permanent
   "reason": "Recent forecast (24h old) - cached for 60 minutes"
 }
 ```
+
+Entries written before #61 stored the value under `"forecast"`; they're still read.
+
+Keys may contain only letters, digits, `.`, `_` and `-` (they become file and
+S3 object names), so a key can never escape the cache directory or prefix.
 
 ## Local File Cache
 
@@ -161,11 +180,13 @@ npm test
 
 ## Cache Key Format
 
+Zone forecasts:
+
 ```
-zone-{zoneId}-date-{YYYY-MM-DD}
+v2-zone-{zoneId}-date-{YYYY-MM-DD}
 ```
 
-The `v2-` prefix is `CACHE_KEY_VERSION`; bump it whenever existing entries may be wrong (entries older than 72h never expire). v2 was introduced in #51.
+The `v2-` prefix is `CACHE_KEY_VERSION` in `zone-forecast.ts`; bump it whenever existing entries may be wrong (entries older than 72h never expire). v2 was introduced in #51.
 
 Examples:
 - `v2-zone-1648-date-2025-01-15`
@@ -175,5 +196,6 @@ Examples:
 
 - Cache failures (read/write errors) are logged but don't break the API
 - Expired entries are automatically deleted on read
-- Both positive (forecast found) and negative (no forecast) results are cached
+- Both positive (forecast found) and negative (no forecast) zone results are cached; API errors are not
+- Other kinds of data should use their own key prefix and version (e.g. `caic-v1-…`), so bumping one never invalidates another
 - Cache is initialized lazily on first use
