@@ -11,7 +11,7 @@
  * Fetches forecasts and updates Strava activities.
  */
 
-import type { SQSEvent, SQSHandler } from 'aws-lambda';
+import type { SQSBatchItemFailure, SQSBatchResponse, SQSEvent, SQSHandler } from 'aws-lambda';
 import type { StravaWebhookEvent } from './types.js';
 import { getActivity, updateActivity } from './strava.js';
 import { getForecastForCoordinate } from '@multifarious/forecast-api';
@@ -39,20 +39,30 @@ const logger = {
 
 /**
  * Main Lambda handler for SQS
+ *
+ * Reports failures per record (requires `reportBatchItemFailures` on the event
+ * source), so only failed messages are retried. After `maxReceiveCount` failed
+ * attempts SQS moves a message to the dead-letter queue.
  */
-export const handler: SQSHandler = async (event: SQSEvent): Promise<void> => {
+export const handler: SQSHandler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
   logger.info('BatchProcessingStarted', { recordCount: event.Records.length });
+
+  const batchItemFailures: SQSBatchItemFailure[] = [];
 
   for (const record of event.Records) {
     try {
       const webhookEvent: StravaWebhookEvent = JSON.parse(record.body);
       await processWebhookEvent(webhookEvent);
     } catch (error) {
-      logger.error('RecordProcessingFailed', error, { messageId: record.messageId });
-      // Throwing error here will cause SQS to retry this message (visibility timeout)
-      throw error;
+      logger.error('RecordProcessingFailed', error, {
+        messageId: record.messageId,
+        receiveCount: record.attributes?.ApproximateReceiveCount,
+      });
+      batchItemFailures.push({ itemIdentifier: record.messageId });
     }
   }
+
+  return { batchItemFailures };
 };
 
 /**

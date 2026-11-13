@@ -11,6 +11,18 @@ import { createUserRecord, saveUser, createOAuthState, validateAndConsumeOAuthSt
 const STRAVA_CLIENT_ID = process.env.STRAVA_CLIENT_ID!;
 
 /**
+ * Escape text for safe interpolation into HTML
+ */
+export function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Construct the OAuth redirect URI from the request
  */
 function getRedirectUri(event: APIGatewayProxyEvent): string {
@@ -57,8 +69,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
           <head><meta charset="utf-8"></head>
           <body>
             <h1>Error</h1>
-            <p>Something went wrong during authorization.</p>
-            <p>${error instanceof Error ? error.message : 'Unknown error'}</p>
+            <p>Something went wrong during authorization. Please try again.</p>
             <a href="../">Try again</a>
           </body>
         </html>
@@ -236,7 +247,7 @@ async function handleCallback(event: APIGatewayProxyEvent): Promise<APIGatewayPr
         <body>
           <h1>✅ Successfully Connected!</h1>
           <div class="success">
-            <p>Welcome, ${tokenResponse.athlete.firstname} ${tokenResponse.athlete.lastname}!</p>
+            <p>Welcome, ${escapeHtml(`${tokenResponse.athlete.firstname} ${tokenResponse.athlete.lastname}`)}!</p>
             <p>Your Strava account is now connected to the Avalanche Forecast service.</p>
           </div>
           <p>From now on, your BackcountrySki activities will automatically get NWAC avalanche forecasts added to their descriptions.</p>

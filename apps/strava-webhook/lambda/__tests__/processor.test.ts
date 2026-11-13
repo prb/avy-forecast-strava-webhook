@@ -308,14 +308,39 @@ describe('Webhook Handler', () => {
       expect(strava.updateActivity).not.toHaveBeenCalled();
     });
 
-    it('should throw error if activity processing fails (triggers SQS retry)', async () => {
+    it('should report a failed record so SQS retries it (and eventually dead-letters it)', async () => {
       const event = createSQSEvent(mockWebhookEvent);
 
       // Mock Strava API error
       vi.mocked(strava.getActivity).mockRejectedValue(new Error('Strava API error'));
 
-      // Should throw error to trigger SQS retry
-      await expect(handler(event, {} as any, {} as any)).rejects.toThrow('Strava API error');
+      const result = await handler(event, {} as any, {} as any);
+
+      expect(result).toEqual({ batchItemFailures: [{ itemIdentifier: '1' }] });
+    });
+
+    it('should report only the failed records in a batch', async () => {
+      const ok = createSQSEvent(mockRunWebhookEvent).Records[0];
+      const bad = { ...createSQSEvent(mockWebhookEvent).Records[0], messageId: 'bad' };
+      const event: SQSEvent = { Records: [{ ...ok, messageId: 'ok' }, bad] };
+
+      vi.mocked(strava.getActivity)
+        .mockResolvedValueOnce(mockRunActivity)
+        .mockRejectedValueOnce(new Error('Strava API error'));
+
+      const result = await handler(event, {} as any, {} as any);
+
+      expect(strava.getActivity).toHaveBeenCalledTimes(2);
+      expect(result).toEqual({ batchItemFailures: [{ itemIdentifier: 'bad' }] });
+    });
+
+    it('should report no failures when every record succeeds', async () => {
+      const event = createSQSEvent(mockRunWebhookEvent);
+      vi.mocked(strava.getActivity).mockResolvedValue(mockRunActivity);
+
+      const result = await handler(event, {} as any, {} as any);
+
+      expect(result).toEqual({ batchItemFailures: [] });
     });
 
     it('should use local date when activity crosses UTC midnight boundary', async () => {
@@ -560,8 +585,9 @@ describe('Webhook Handler', () => {
       const event = createSQSEvent({});
       event.Records[0].body = 'invalid json{';
 
-      // Should throw error to trigger SQS retry
-      await expect(handler(event, {} as any, {} as any)).rejects.toThrow();
+      // Reported as a failure (it will be dead-lettered after maxReceiveCount)
+      const result = await handler(event, {} as any, {} as any);
+      expect(result).toEqual({ batchItemFailures: [{ itemIdentifier: '1' }] });
     });
   });
 });

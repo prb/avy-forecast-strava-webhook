@@ -53,9 +53,21 @@ export class StravaWebhookStack extends cdk.Stack {
     // ============================================
     // SQS Queue for Webhook Events
     // ============================================
+    // Messages that fail processing maxReceiveCount times land here instead of
+    // being retried until the source queue's retention expires
+    const webhookDeadLetterQueue = new sqs.Queue(this, 'StravaWebhookDLQ', {
+      retentionPeriod: cdk.Duration.days(14), // Max retention, to allow inspection/redrive
+    });
+
     const webhookQueue = new sqs.Queue(this, 'StravaWebhookQueue', {
-      visibilityTimeout: cdk.Duration.seconds(60), // Give Lambda 60s to process
+      // AWS recommends >= 6x the consumer Lambda timeout (30s) so in-flight
+      // messages aren't redelivered while the function is still retrying/throttled
+      visibilityTimeout: cdk.Duration.seconds(180),
       retentionPeriod: cdk.Duration.days(4), // Keep messages for 4 days
+      deadLetterQueue: {
+        queue: webhookDeadLetterQueue,
+        maxReceiveCount: 3,
+      },
     });
 
     // ============================================
@@ -126,6 +138,7 @@ export class StravaWebhookStack extends cdk.Stack {
     // Add SQS Event Source
     processorFunction.addEventSource(new lambdaEventSources.SqsEventSource(webhookQueue, {
       batchSize: 1, // Process one at a time for simplicity
+      reportBatchItemFailures: true, // Handler returns batchItemFailures; retry only those
     }));
 
     // ============================================
@@ -307,6 +320,26 @@ export class StravaWebhookStack extends cdk.Stack {
     });
 
     errorAlarm.addAlarmAction(new cdk.aws_cloudwatch_actions.SnsAction(alarmTopic));
+
+    // Alarm when any message has exhausted its retries
+    const deadLetterAlarm = new cloudwatch.Alarm(this, 'WebhookDeadLetterAlarm', {
+      metric: webhookDeadLetterQueue.metricApproximateNumberOfMessagesVisible({
+        period: cdk.Duration.minutes(5),
+        statistic: 'Maximum',
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      alarmDescription: 'Webhook events failed processing repeatedly and were moved to the DLQ',
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    deadLetterAlarm.addAlarmAction(new cdk.aws_cloudwatch_actions.SnsAction(alarmTopic));
+
+    new cdk.CfnOutput(this, 'DeadLetterQueueUrl', {
+      value: webhookDeadLetterQueue.queueUrl,
+      description: 'Webhook events that exhausted retries (inspect, then redrive or purge)',
+    });
 
     // 4. CloudWatch Logs Insights Saved Queries
     // Monthly Active Users
