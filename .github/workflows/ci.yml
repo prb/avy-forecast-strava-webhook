@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Weekly, so new advisories against unchanged dependencies still show up
+  schedule:
+    - cron: '0 15 * * 1'
 
 permissions:
   contents: read
@@ -23,9 +26,15 @@ jobs:
         with:
           node-version: 22
 
-      # package-lock.json is gitignored in this repo, so `npm ci` isn't available
+      # Installs exactly what package-lock.json records
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
+
+      # Fails on high or critical advisories; moderate and low ones are listed
+      # but don't fail the build (e.g. the minimatch copy bundled inside
+      # aws-cdk-lib, which only an aws-cdk-lib release can update)
+      - name: Audit dependencies
+        run: npm run audit
 
       # Workspace packages are consumed via their dist/ output, so build first
       - name: Build

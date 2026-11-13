@@ -13,6 +13,7 @@
     "test": "npm run test --workspaces",
     "test:unit": "npm run test:unit --workspaces",
     "type-check": "npm run type-check --workspaces",
+    "audit": "npm audit --audit-level=high",
     "clean": "rm -rf node_modules packages/*/node_modules packages/*/dist"
   },
   "keywords": [
