@@ -7,8 +7,8 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { exchangeCodeForToken } from './strava.js';
 import { createUserRecord, saveUser, createOAuthState, validateAndConsumeOAuthState } from './db.js';
-
-const STRAVA_CLIENT_ID = process.env.STRAVA_CLIENT_ID!;
+import { requireEnv } from './env.js';
+import { logger, requestSummary } from './logger.js';
 
 /**
  * Escape text for safe interpolation into HTML
@@ -38,7 +38,7 @@ function getRedirectUri(event: APIGatewayProxyEvent): string {
  * Main Lambda handler
  */
 export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
-  console.log('OAuth handler invoked:', JSON.stringify(event, null, 2));
+  logger.info('OAuthRequestReceived', requestSummary(event));
 
   try {
     const path = event.path || event.resource || '';
@@ -58,7 +58,7 @@ export async function handler(event: APIGatewayProxyEvent): Promise<APIGatewayPr
       body: JSON.stringify({ error: 'Not found' }),
     };
   } catch (error) {
-    console.error('Error in OAuth flow:', error);
+    logger.error('OAuthFailed', error);
 
     return {
       statusCode: 500,
@@ -89,15 +89,14 @@ async function handleConnect(event: APIGatewayProxyEvent): Promise<APIGatewayPro
   const state = await createOAuthState();
 
   const authUrl = new URL('https://www.strava.com/oauth/authorize');
-  authUrl.searchParams.set('client_id', STRAVA_CLIENT_ID);
+  authUrl.searchParams.set('client_id', requireEnv('STRAVA_CLIENT_ID'));
   authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('response_type', 'code');
   authUrl.searchParams.set('scope', scope);
   authUrl.searchParams.set('approval_prompt', 'auto');
   authUrl.searchParams.set('state', state);
 
-  console.log('Redirecting to Strava OAuth with state token');
-  console.log('Redirect URI:', redirectUri);
+  logger.info('OAuthRedirect', { redirectUri });
 
   return {
     statusCode: 302,
@@ -119,7 +118,7 @@ async function handleCallback(event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
   // Check for OAuth error
   if (error) {
-    console.error('OAuth error:', error);
+    logger.warn('OAuthDenied', { oauthError: error });
 
     return {
       statusCode: 400,
@@ -144,7 +143,7 @@ async function handleCallback(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     isValidState = await validateAndConsumeOAuthState(state || '');
   } catch (error) {
     // DynamoDB service error (throttling, outage, etc.)
-    console.error('Service error during OAuth state validation:', error);
+    logger.error('OAuthStateValidationFailed', error);
 
     return {
       statusCode: 500,
@@ -164,7 +163,7 @@ async function handleCallback(event: APIGatewayProxyEvent): Promise<APIGatewayPr
   }
 
   if (!isValidState) {
-    console.error('Invalid or missing OAuth state parameter');
+    logger.warn('OAuthStateRejected');
 
     return {
       statusCode: 403,
@@ -208,18 +207,17 @@ async function handleCallback(event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
   }
 
-  console.log('Exchanging code for access token');
 
   // Exchange code for access token
   const tokenResponse = await exchangeCodeForToken(code);
 
-  console.log(`Received tokens for athlete ${tokenResponse.athlete.id}`);
+  logger.info('OAuthTokensReceived', { athleteId: tokenResponse.athlete.id });
 
   // Save user to database
   const user = createUserRecord(tokenResponse);
   await saveUser(user);
 
-  console.log(`Saved user ${user.athlete_id} to database`);
+  logger.info('UserSaved', { athleteId: user.athlete_id });
 
   // Success page
   return {

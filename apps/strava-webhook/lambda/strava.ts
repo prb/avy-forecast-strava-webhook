@@ -4,9 +4,8 @@
 
 import type { StravaActivity, StravaTokenResponse } from './types.js';
 import { getUser, updateUserTokens } from './db.js';
-
-const STRAVA_CLIENT_ID = process.env.STRAVA_CLIENT_ID!;
-const STRAVA_CLIENT_SECRET = process.env.STRAVA_CLIENT_SECRET!;
+import { requireEnv } from './env.js';
+import { logger } from './logger.js';
 
 /**
  * Sanitize sensitive data for logging
@@ -75,8 +74,8 @@ export async function refreshAccessToken(refreshToken: string): Promise<StravaTo
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      client_id: STRAVA_CLIENT_ID,
-      client_secret: STRAVA_CLIENT_SECRET,
+      client_id: requireEnv('STRAVA_CLIENT_ID'),
+      client_secret: requireEnv('STRAVA_CLIENT_SECRET'),
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
     }),
@@ -100,11 +99,11 @@ export async function getValidAccessToken(athleteId: number): Promise<string> {
     throw new Error(`User ${athleteId} not found`);
   }
 
-  console.log(`Token for athlete ${athleteId} - expires: ${new Date(user.expires_at * 1000).toISOString()}`);
+  logger.info('TokenLoaded', { athleteId, expiresAt: new Date(user.expires_at * 1000).toISOString() });
 
   // Check if token needs refresh
   if (isTokenExpired(user.expires_at)) {
-    console.log(`Refreshing token for athlete ${athleteId}`);
+    logger.info('TokenRefreshStarted', { athleteId });
 
     const tokenResponse = await refreshAccessToken(user.refresh_token);
 
@@ -146,39 +145,6 @@ export async function getActivity(
 }
 
 /**
- * Update activity description
- */
-export async function updateActivityDescription(
-  activityId: number,
-  athleteId: number,
-  description: string
-): Promise<void> {
-  const accessToken = await getValidAccessToken(athleteId);
-
-  console.log(`Updating activity ${activityId} for athlete ${athleteId} with description (${description.length} chars)`);
-
-  const response = await fetch(`https://www.strava.com/api/v3/activities/${activityId}`, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ description }),
-  });
-
-  console.log(`Strava API response status: ${response.status} ${response.statusText}`);
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error(`Strava API error response: ${error}`);
-    throw new Error(`Failed to update activity: ${response.status} ${error}`);
-  }
-
-  const responseData = (await response.json()) as StravaActivity;
-  console.log(`Updated activity ${responseData.id} (type: ${responseData.type || responseData.sport_type})`);
-}
-
-/**
  * Update activity title and/or description
  */
 export async function updateActivity(
@@ -188,8 +154,7 @@ export async function updateActivity(
 ): Promise<void> {
   const accessToken = await getValidAccessToken(athleteId);
 
-  const fieldsUpdated = Object.keys(updates).join(', ');
-  console.log(`Updating activity ${activityId} for athlete ${athleteId} - fields: ${fieldsUpdated}`);
+  logger.info('StravaActivityUpdateStarted', { activityId, athleteId, fields: Object.keys(updates) });
 
   const response = await fetch(`https://www.strava.com/api/v3/activities/${activityId}`, {
     method: 'PUT',
@@ -200,16 +165,15 @@ export async function updateActivity(
     body: JSON.stringify(updates),
   });
 
-  console.log(`Strava API response status: ${response.status} ${response.statusText}`);
-
   if (!response.ok) {
     const error = await response.text();
-    console.error(`Strava API error response: ${error}`);
+    // Rethrown; the processor logs the failure at ERROR
+    logger.warn('StravaActivityUpdateFailed', { activityId, athleteId, status: response.status, response: error });
     throw new Error(`Failed to update activity: ${response.status} ${error}`);
   }
 
   const responseData = (await response.json()) as StravaActivity;
-  console.log(`Updated activity ${responseData.id} successfully`);
+  logger.info('StravaActivityUpdated', { activityId: responseData.id, athleteId });
 }
 
 /**
@@ -222,8 +186,8 @@ export async function exchangeCodeForToken(code: string): Promise<StravaTokenRes
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      client_id: STRAVA_CLIENT_ID,
-      client_secret: STRAVA_CLIENT_SECRET,
+      client_id: requireEnv('STRAVA_CLIENT_ID'),
+      client_secret: requireEnv('STRAVA_CLIENT_SECRET'),
       code,
       grant_type: 'authorization_code',
     }),

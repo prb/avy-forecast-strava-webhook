@@ -3,16 +3,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TMP_DIR = path.join(__dirname, '../data/zones/tmp');
 const ZONES_DIR = path.join(__dirname, '../data/zones');
+const ZONES_URL = 'https://api.avalanche.state.co.us/api/v2/zones.json';
 const ZONE_MAP_URL = 'https://api.avalanche.state.co.us/api/v2/zones/map';
 
 async function downloadCaicZones() {
-    const caicFile = path.join(TMP_DIR, 'CAIC-zones.json');
-
     try {
-        const content = await fs.readFile(caicFile, 'utf-8');
-        const zones = JSON.parse(content);
+        // CAIC's zone list (data/zones/tmp/ is no longer tracked, #55)
+        const listResponse = await fetch(ZONES_URL);
+        if (!listResponse.ok) {
+            throw new Error(`Failed to fetch ${ZONES_URL}: ${listResponse.status}`);
+        }
+        const zones = await listResponse.json();
 
         // Filter for backcountry forecast zones
         // Based on inspection: type='backcountry_zone' and category='backcountry'
@@ -20,7 +22,7 @@ async function downloadCaicZones() {
             z.type === 'backcountry_zone' &&
             z.category === 'backcountry' &&
             z.id
-        );
+        ).sort((a: any, b: any) => a.slug.localeCompare(b.slug)); // IDs below follow slug order
 
         console.log(`Found ${forecastZones.length} CAIC backcountry zones.`);
 
