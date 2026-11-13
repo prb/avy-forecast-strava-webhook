@@ -16,7 +16,7 @@ import type { StravaWebhookEvent } from './types.js';
 import { logger } from './logger.js';
 import { getActivity, updateActivity } from './strava.js';
 import { getForecastForCoordinate } from '@multifarious/forecast-api';
-import { formatForecast, hasForecastLine, removeForecastLines } from '@multifarious/forecast-formatter';
+import { formatForecast, formatNoForecastNote, hasForecastLine, removeForecastLines } from '@multifarious/forecast-formatter';
 
 /**
  * Main Lambda handler for SQS
@@ -112,9 +112,12 @@ async function processActivity(
     // If user manually invoked with #avy_forecast, clean up title and add message
     if (hasCommand) {
       const newTitle = activity.name.replace(/#avy_forecast/g, '').trim();
+      // Replace any earlier forecast line or note rather than adding another
+      const previous = removeForecastLines(activity.description || '');
+      const note = formatNoForecastNote('Activity has no location data');
       const updates = {
         name: newTitle,
-        description: (activity.description || '') + '\n\n[No avalanche forecast available: Activity has no location data]',
+        description: previous ? `${previous}\n\n${note}` : note,
       };
       logger.info('CleaningUpCommand', { ...logContext, newTitle });
       await updateActivity(activityId, athleteId, updates);
@@ -153,10 +156,13 @@ async function processActivity(
   // Prepare description update
   let newDescription = currentDescription;
 
-  // If refreshing (manual command + existing forecast), remove old forecast first
-  if (hasForecast && hasCommand) {
+  // If refreshing (manual command), remove any old forecast line or
+  // "no forecast" note first, so they aren't repeated
+  if (hasCommand) {
     newDescription = removeForecastLines(currentDescription);
-    logger.info('OldForecastRemoved', logContext);
+    if (newDescription !== currentDescription.trim()) {
+      logger.info('OldForecastRemoved', logContext);
+    }
   }
 
   // Normalize description whitespace before adding new content
@@ -191,7 +197,8 @@ async function processActivity(
     // If using #avy_forecast command, add a message explaining why no forecast was added
     if (hasCommand) {
       const reason = noForecastReason || 'No forecast available for this location/date';
-      newDescription = newDescription + `\n\n[No avalanche forecast available: ${reason}]`;
+      const note = formatNoForecastNote(reason);
+      newDescription = newDescription ? `${newDescription}\n\n${note}` : note;
     } else {
       // For auto-processing (create events), just skip silently
       return;

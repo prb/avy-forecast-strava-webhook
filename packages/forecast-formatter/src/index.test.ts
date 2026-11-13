@@ -5,6 +5,7 @@ import {
   formatForecast,
   getDangerLevelName,
   hasForecastLine,
+  formatNoForecastNote,
   removeForecastLines,
 } from './index.js';
 import type { ForecastProduct, DangerRating } from '@multifarious/forecast-api';
@@ -284,6 +285,46 @@ describe('Forecast Formatter', () => {
 
     it('should leave descriptions without forecasts unchanged', () => {
       expect(removeForecastLines('Line one\n\nLine two')).toBe('Line one\n\nLine two');
+    });
+
+    it('should remove "no forecast" notes too, so a refresh does not repeat them', () => {
+      const note = '[No avalanche forecast available: No forecast available for West Slopes South]';
+      expect(removeForecastLines(`Lovely day out.\r\n\r\n${note}\n\n${note}`)).toBe('Lovely day out.');
+      expect(hasForecastLine(`Lovely day out.\n\n${note}`)).toBe(false);
+    });
+
+    it('should format the "no forecast" note', () => {
+      expect(formatNoForecastNote('Activity has no location data')).toBe(
+        '[No avalanche forecast available: Activity has no location data]'
+      );
+    });
+
+    it('should not remove other bracketed text', () => {
+      expect(removeForecastLines('[updated] Notes\n\n[No forecast checked]')).toBe('[updated] Notes\n\n[No forecast checked]');
+    });
+
+    describe('with CRLF line endings, as Strava saves edited descriptions (#71)', () => {
+      // Shape of activity 18150080799: an old forecast line followed by a
+      // line added later, plus the line a refresh had appended with \n
+      const description =
+        'Aimed for the Chutes.\r\n\r\n' +
+        `${legacyLine}\r\n\r\n` +
+        '⛰️ Panorama Point (2,106 m) | 🌐 summitbag.com\n\n' +
+        nwacLine;
+
+      it('should recognize a forecast line that is not the last line', () => {
+        expect(hasForecastLine(`Great day!\r\n\r\n${nwacLine}\r\n\r\nMore notes`)).toBe(true);
+      });
+
+      it('should remove every forecast line and tidy blank lines', () => {
+        expect(removeForecastLines(description)).toBe(
+          'Aimed for the Chutes.\r\n\r\n⛰️ Panorama Point (2,106 m) | 🌐 summitbag.com'
+        );
+      });
+
+      it('should keep CRLF line endings', () => {
+        expect(removeForecastLines(`Top\r\n\r\n${uacLine}\r\n\r\nBottom`)).toBe('Top\r\n\r\nBottom');
+      });
     });
   });
 

@@ -572,6 +572,75 @@ describe('Webhook Handler', () => {
       expect(updates.description).toBe(expectedMtHoodForecastText);
     });
 
+    it('should not repeat the "no forecast" note when a refresh still finds no forecast', async () => {
+      const event = createSQSEvent(mockUpdateWebhookEvent);
+      // Shape of activity 14646123922: an earlier refresh's note at the bottom
+      vi.mocked(strava.getActivity).mockResolvedValue({
+        ...mockBackcountryActivity,
+        name: 'Prow + Ruth #avy_forecast',
+        description:
+          'Lovely day out.\r\n\r\n⛰️ Steamboat Prow | 🌐 summitbag.com\r\n\r\n' +
+          '[No avalanche forecast available: No forecast available for West Slopes South]',
+      });
+      vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue({
+        zone: { id: 1648, zone_id: '6', name: 'West Slopes South', center_id: 'NWAC' },
+        product: null,
+        error: 'No forecast available for West Slopes South',
+      } as ForecastProductResponse as any);
+
+      await handler(event, {} as any, {} as any);
+
+      const updates = vi.mocked(strava.updateActivity).mock.calls[0][2];
+      expect(updates.description).toBe(
+        'Lovely day out.\r\n\r\n⛰️ Steamboat Prow | 🌐 summitbag.com\n\n' +
+          '[No avalanche forecast available: No forecast available for West Slopes South]'
+      );
+    });
+
+    it('should replace an earlier "no forecast" note with the forecast once one is found', async () => {
+      const event = createSQSEvent(mockUpdateWebhookEvent);
+      vi.mocked(strava.getActivity).mockResolvedValue({
+        ...mockBackcountryActivity,
+        name: 'Mt Hood Tour #avy_forecast',
+        description: 'Great powder day!\n\n[No avalanche forecast available: No forecast available for Mt Hood]',
+      });
+      vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue({
+        zone: { id: 1657, zone_id: '10', name: 'Mt Hood', center_id: 'NWAC' },
+        product: mockMtHoodForecast,
+      } as ForecastProductResponse as any);
+
+      await handler(event, {} as any, {} as any);
+
+      const updates = vi.mocked(strava.updateActivity).mock.calls[0][2];
+      expect(updates.description).toBe(`Great powder day!\n\n${expectedMtHoodForecastText}`);
+    });
+
+    it('should replace every forecast line in a CRLF description, not just the last (#71)', async () => {
+      const event = createSQSEvent(mockUpdateWebhookEvent);
+      // Edited in Strava (CRLF), with a line added below the old forecast and
+      // the copy an earlier refresh appended with \n
+      vi.mocked(strava.getActivity).mockResolvedValue({
+        ...mockBackcountryActivity,
+        name: 'Mt Hood Tour #avy_forecast',
+        description:
+          'Great powder day!\r\n\r\n' +
+          'NWAC Mt Hood Zone forecast: 2🟨/2🟨/1🟩 (https://nwac.us/avalanche-forecast/#/forecast/10/166377)\r\n\r\n' +
+          '⛰️ Mount Hood | 🌐 summitbag.com\n\n' +
+          'NWAC Mt Hood Zone forecast: 2🟨/2🟨/1🟩 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166377)',
+      });
+      vi.mocked(forecastApi.getForecastForCoordinate).mockResolvedValue({
+        zone: { id: 1657, zone_id: '10', name: 'Mt Hood', center_id: 'NWAC' },
+        product: mockMtHoodForecast,
+      } as ForecastProductResponse as any);
+
+      await handler(event, {} as any, {} as any);
+
+      const updates = vi.mocked(strava.updateActivity).mock.calls[0][2];
+      expect(updates.description).toBe(
+        `Great powder day!\r\n\r\n⛰️ Mount Hood | 🌐 summitbag.com\n\n${expectedMtHoodForecastText}`
+      );
+    });
+
     it('should format UAC forecasts with the UAC prefix and zone URL (#53)', async () => {
       const event = createSQSEvent(mockWebhookEvent);
       vi.mocked(strava.getActivity).mockResolvedValue({
@@ -650,6 +719,20 @@ describe('Webhook Handler', () => {
           description: expect.stringContaining('[No avalanche forecast available: Activity has no location data]'),
         }
       );
+    });
+
+    it('should not repeat the "no location data" note', async () => {
+      const event = createSQSEvent(mockUpdateWebhookEvent);
+      vi.mocked(strava.getActivity).mockResolvedValue({
+        ...mockActivityNoLocation,
+        name: 'Indoor Ski Training #avy_forecast',
+        description: 'Treadmill\n\n[No avalanche forecast available: Activity has no location data]',
+      });
+
+      await handler(event, {} as any, {} as any);
+
+      const updates = vi.mocked(strava.updateActivity).mock.calls[0][2];
+      expect(updates.description).toBe('Treadmill\n\n[No avalanche forecast available: Activity has no location data]');
     });
   });
 
