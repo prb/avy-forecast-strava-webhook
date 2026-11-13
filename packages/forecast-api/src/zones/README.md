@@ -39,7 +39,7 @@ Load all zone boundaries from GeoJSON files. Results are cached after first load
 
 ### `getZoneById(id: number): Promise<ZoneWithBoundary | null>`
 
-Get a specific zone by its ID (1645-1657).
+Get a specific zone by its internal numeric ID (see `zones/config.ts`; not the current avalanche.org zone ID).
 
 ### `getAllZones(): Promise<ZoneWithBoundary[]>`
 

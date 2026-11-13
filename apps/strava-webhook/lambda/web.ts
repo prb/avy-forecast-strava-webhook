@@ -195,7 +195,7 @@ export async function handler(_event: APIGatewayProxyEvent): Promise<APIGatewayP
             <div class="emoji">🏔️⛷️</div>
             <h1>Avy Forecast Webhook</h1>
             <p class="subtitle">
-              Automatically add NWAC avalanche forecasts to your Strava backcountry ski activities
+              Automatically add avalanche forecasts to your Strava backcountry ski activities in areas covered by NWAC and UAC.
             </p>
 
             <div class="feature-list">
@@ -231,7 +231,7 @@ export async function handler(_event: APIGatewayProxyEvent): Promise<APIGatewayP
               Updated: "Great day on Mt Hood!<br/><br/>
               🏔️ NWAC Mt Hood Zone forecast<br/>
               Danger Rating: 3🟧/3🟧/2🟨<br/>
-              https://nwac.us/avalanche-forecast/#/forecast/10/166378"
+              https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166378"
             </div>
 
             <a href="connect" class="strava-connect-button">

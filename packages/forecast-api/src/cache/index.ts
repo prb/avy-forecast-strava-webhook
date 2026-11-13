@@ -1,19 +1,21 @@
 /**
  * Forecast cache module
  *
- * Provides caching layer for avalanche forecasts with smart TTL:
+ * A generic key/value store (local files or S3). Callers choose keys and
+ * expiry; see zone-forecast.ts for avalanche.org zone forecasts:
  * - Recent forecasts (within 72 hours): 60 minute cache
  * - Older forecasts (>72 hours): Permanent cache
  */
 
 import { LocalCacheStore } from './local.js';
 import { S3CacheStore } from './s3.js';
-import type { ForecastCache, CacheConfig } from './types.js';
+import type { CacheStore, CacheConfig } from './types.js';
 
 export { LocalCacheStore } from './local.js';
 export { S3CacheStore } from './s3.js';
 export * from './types.js';
 export * from './ttl.js';
+export * from './zone-forecast.js';
 
 /**
  * Create a cache instance based on configuration
@@ -21,7 +23,7 @@ export * from './ttl.js';
  * @param config Cache configuration
  * @returns Configured cache instance
  */
-export function createCache(config?: CacheConfig): ForecastCache {
+export function createCache(config?: CacheConfig): CacheStore {
   const cacheType = config?.type || process.env.CACHE_TYPE || 'local';
 
   switch (cacheType) {
@@ -57,14 +59,14 @@ export function createCache(config?: CacheConfig): ForecastCache {
 /**
  * Global cache instance (singleton)
  */
-let globalCache: ForecastCache | null = null;
+let globalCache: CacheStore | null = null;
 
 /**
  * Get the global cache instance
  *
  * Creates a cache on first call based on environment configuration.
  */
-export function getCache(config?: CacheConfig): ForecastCache {
+export function getCache(config?: CacheConfig): CacheStore {
   if (!globalCache) {
     globalCache = createCache(config);
   }

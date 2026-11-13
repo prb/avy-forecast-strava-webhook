@@ -1,20 +1,23 @@
 # Strava Avalanche Forecast Enrichment
 
-Automatically enrich Strava backcountry ski activities with avalanche forecast information from the Northwest Avalanche Center (NWAC).
+Automatically enrich Strava backcountry ski activities with avalanche forecast information from the Northwest Avalanche Center (NWAC) and the Utah Avalanche Center (UAC). Colorado (CAIC) zone boundaries are included, but forecasts aren't supported yet (#52).
 
 ## What It Does
 
 When you upload a BackcountrySki activity to Strava, this system automatically:
 1. Detects the activity location and date
-2. Fetches the relevant NWAC avalanche forecast
+2. Fetches the relevant avalanche forecast for that zone (NWAC or UAC)
 3. Appends formatted forecast data to your activity description
 
 **Manual Trigger**: Add `#avy_forecast` to any activity title to manually request a forecast.
 
 **Example output:**
 ```
-NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)
+NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166378)
+UAC Salt Lake Zone forecast: 2🟨 (https://utahavalanchecenter.org/forecast/salt-lake/2/16/2026)
 ```
+
+NWAC forecasts show upper/middle/lower elevation-band ratings. avalanche.org publishes only an overall rating for UAC, so UAC shows one rating.
 
 ## Quick Start
 

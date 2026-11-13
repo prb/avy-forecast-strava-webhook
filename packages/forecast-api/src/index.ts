@@ -117,12 +117,22 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 // Public API exports
 export { getForecastForCoordinate, isValidCoordinate, isValidDate } from './forecast.js';
-export { fetchNWACForecastForZone, buildForecastUrl } from './api/index.js';
-export { getCache, createCache, LocalCacheStore, S3CacheStore } from './cache/index.js';
+export { fetchForecastForZone, buildForecastUrl } from './api/index.js';
+export { SUPPORTED_CENTERS } from './zones/config.js';
+export {
+  getCache,
+  createCache,
+  LocalCacheStore,
+  S3CacheStore,
+  getCacheKey,
+  getCachedZoneForecast,
+  cacheZoneForecast,
+} from './cache/index.js';
 
 // Type exports
-export type { Coordinate, ForecastResponse, ForecastProductResponse, ForecastProduct, NWACZone, DangerRating } from './types/index.js';
-export type { CachedForecast, ForecastCache, CacheConfig } from './cache/types.js';
+export type { AvalancheCenterId, Coordinate, ForecastResponse, ForecastResponseZone, ForecastProductResponse, ForecastProduct, NWACZone, DangerRating } from './types/index.js';
+export type { CacheEntry, CacheSetOptions, CacheStore, CacheConfig } from './cache/types.js';
+export type { CachedZoneForecast } from './cache/zone-forecast.js';
 
 // Demo function for development/testing
 export { demo };

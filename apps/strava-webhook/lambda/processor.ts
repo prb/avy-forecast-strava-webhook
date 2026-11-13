@@ -15,7 +15,7 @@ import type { SQSBatchItemFailure, SQSBatchResponse, SQSEvent, SQSHandler } from
 import type { StravaWebhookEvent } from './types.js';
 import { getActivity, updateActivity } from './strava.js';
 import { getForecastForCoordinate } from '@multifarious/forecast-api';
-import { formatForecast } from '@multifarious/forecast-formatter';
+import { formatForecast, hasForecastLine, removeForecastLines } from '@multifarious/forecast-formatter';
 
 /**
  * Structured Logger Helper
@@ -148,13 +148,9 @@ async function processActivity(
     return;
   }
 
-  // Check if description already has forecast (idempotency)
-  // Look for our specific forecast text pattern or the URL
-  // Pattern: "NWAC [Zone Name] Zone forecast:"
+  // Check if description already has a forecast line from us (idempotency)
   const currentDescription = activity.description || '';
-  const hasForecast =
-    currentDescription.includes('nwac.us/avalanche-forecast/#/forecast/') ||
-    /NWAC .* Zone forecast:/.test(currentDescription);
+  const hasForecast = hasForecastLine(currentDescription);
 
   if (hasForecast && !hasCommand) {
     logger.info('ProcessingSkipped', { ...logContext, reason: 'Forecast already present' });
@@ -185,11 +181,7 @@ async function processActivity(
 
   // If refreshing (manual command + existing forecast), remove old forecast first
   if (hasForecast && hasCommand) {
-    // Remove any line containing the NWAC forecast URL pattern
-    // This is more robust than matching specific format like "NWAC ... (URL)"
-    newDescription = currentDescription
-      .replace(/\n\n[^\n]*https:\/\/nwac\.us\/avalanche-forecast\/#\/forecast\/[^\n]*/g, '')
-      .trim();
+    newDescription = removeForecastLines(currentDescription);
     logger.info('OldForecastRemoved', logContext);
   }
 
@@ -197,18 +189,34 @@ async function processActivity(
   // Remove trailing whitespace to ensure consistent spacing
   newDescription = newDescription.replace(/\s+$/, '');
 
+  // Format the forecast with colored emoji squares. A product we can't format
+  // won't get better on retry, so treat it like a missing forecast.
+  let formattedForecast: string | null = null;
+  let noForecastReason = forecastResult.error;
   if (forecastResult.product) {
-    logger.info('ForecastFound', { ...logContext, zoneName: forecastResult.zone.name });
+    try {
+      formattedForecast = formatForecast(forecastResult.product, {
+        center: forecastResult.zone.center_id,
+      });
+    } catch (error) {
+      logger.error('ForecastFormatFailed', error, logContext);
+      noForecastReason = 'Forecast could not be formatted';
+    }
+  }
 
-    // Format the forecast with colored emoji squares
-    const formattedForecast = formatForecast(forecastResult.product);
-    newDescription = newDescription + `\n\n${formattedForecast}`;
+  if (formattedForecast) {
+    logger.info('ForecastFound', {
+      ...logContext,
+      zoneName: forecastResult.zone.name,
+      centerId: forecastResult.zone.center_id,
+    });
+    newDescription = newDescription ? `${newDescription}\n\n${formattedForecast}` : formattedForecast;
   } else {
-    logger.info('ForecastNotFound', { ...logContext, error: forecastResult.error });
+    logger.info('ForecastNotFound', { ...logContext, error: noForecastReason });
 
     // If using #avy_forecast command, add a message explaining why no forecast was added
     if (hasCommand) {
-      const reason = forecastResult.error || 'No forecast available for this location/date';
+      const reason = noForecastReason || 'No forecast available for this location/date';
       newDescription = newDescription + `\n\n[No avalanche forecast available: ${reason}]`;
     } else {
       // For auto-processing (create events), just skip silently

@@ -115,7 +115,7 @@ GET /forecast?lat={latitude}&lon={longitude}&date={YYYY-MM-DD}
     "published_time": "2025-04-13T01:30:00+00:00",
     "danger_rating": 1,
     "bottom_line": "With a frozen snow surface...",
-    "url": "https://nwac.us/avalanche-forecast/#/forecast/6/166672"
+    "url": "https://nwac.us/forecasts/avalanche/west-slopes-south#/forecast/6/166672"
   }
 }
 ```

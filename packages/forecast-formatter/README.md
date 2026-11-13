@@ -24,20 +24,17 @@ import { getForecastForCoordinate } from '@multifarious/forecast-api';
 import { formatForecast } from '@multifarious/forecast-formatter';
 
 // Fetch forecast
+// includeProduct returns the full product, which carries the danger ratings
 const result = await getForecastForCoordinate(
   { latitude: 45.4, longitude: -121.7 },
-  '2025-04-09'
+  '2025-04-09',
+  { includeProduct: true }
 );
 
-if (result.forecast) {
-  // Get full product details to access danger ratings
-  const product = await fetchNWACForecastForZone(result.zone.id, '2025-04-09');
-
-  if (product) {
-    const formatted = formatForecast(product);
-    console.log(formatted);
-    // Output: "NWAC Mt Hood forecast: 3🟧/3🟧/2🟨 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)"
-  }
+if (result.product) {
+  const formatted = formatForecast(result.product);
+  console.log(formatted);
+  // Output: "NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166378)"
 }
 ```
 

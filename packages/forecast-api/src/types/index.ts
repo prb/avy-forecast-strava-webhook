@@ -1,12 +1,15 @@
 import type { Feature, Polygon, MultiPolygon } from 'geojson';
+import type { AvalancheCenterId } from '../zones/config.js';
+
+export type { AvalancheCenterId };
 
 /**
  * NWAC Zone information from avalanche.org API
  */
 export interface NWACZone {
-  /** Zone ID from avalanche.org (e.g., 1645-1657) */
+  /** Zone ID from avalanche.org (renumbered between seasons; don't persist or match on it) */
   id: number;
-  /** Zone ID used in URLs (e.g., 1-10) */
+  /** Center's stable zone identifier used in URLs (e.g., '1'-'10' for NWAC) */
   zone_id: string;
   /** Human-readable zone name */
   name: string;
@@ -86,12 +89,14 @@ export interface ZoneBoundary extends Feature<Polygon | MultiPolygon> {
  * Zone with boundary geometry
  */
 export interface ZoneWithBoundary {
-  /** Zone ID from avalanche.org (e.g., 1645-1657) */
+  /** Internal numeric zone key (not the current avalanche.org zone ID; see zones/config.ts) */
   id: number;
-  /** Zone ID used in URLs (e.g., 1-10) */
+  /** Center's stable zone identifier used in URLs (e.g., '1'-'10' for NWAC) */
   zone_id: string;
   /** Human-readable zone name */
   name: string;
+  /** Avalanche center that publishes forecasts for this zone */
+  center_id: AvalancheCenterId;
   /** GeoJSON boundary */
   boundary: ZoneBoundary;
 }
@@ -105,14 +110,21 @@ export interface Coordinate {
 }
 
 /**
+ * Zone summary included in forecast query responses
+ */
+export interface ForecastResponseZone {
+  id: number;
+  zone_id: string;
+  name: string;
+  /** Avalanche center for the zone; absent when the coordinate is outside all zones */
+  center_id?: AvalancheCenterId;
+}
+
+/**
  * API response for forecast query
  */
 export interface ForecastResponse {
-  zone: {
-    id: number;
-    zone_id: string;
-    name: string;
-  };
+  zone: ForecastResponseZone;
   forecast: {
     product_id: number;
     date: string;
@@ -128,11 +140,7 @@ export interface ForecastResponse {
  * API response for forecast query that includes the full forecast product
  */
 export interface ForecastProductResponse {
-  zone: {
-    id: number;
-    zone_id: string;
-    name: string;
-  };
+  zone: ForecastResponseZone;
   product: ForecastProduct | null;
   error?: string;
 }

@@ -6,18 +6,17 @@ import {
   ListObjectsV2Command,
   DeleteObjectsCommand,
 } from '@aws-sdk/client-s3';
-import type { ForecastProduct } from '../types/index.js';
-import type { ForecastCache, CachedForecast } from './types.js';
-import { getCacheKey } from './types.js';
-import { calculateExpiration, isExpired, getTTLReason } from './ttl.js';
+import type { CacheEntry, CacheSetOptions, CacheStore } from './types.js';
+import { assertValidCacheKey, buildCacheEntry, parseCacheEntry } from './types.js';
+import { isExpired } from './ttl.js';
 
 /**
  * S3 cache implementation
  *
- * Stores cache entries as JSON objects in Amazon S3.
+ * Stores each entry as a JSON object named after its key, under the prefix.
  * Supports both environment variable auth (local) and IAM role auth (AWS).
  */
-export class S3CacheStore implements ForecastCache {
+export class S3CacheStore implements CacheStore {
   private client: S3Client;
   private bucket: string;
   private prefix: string;
@@ -35,96 +34,69 @@ export class S3CacheStore implements ForecastCache {
   }
 
   /**
-   * Get S3 key for a cache entry
+   * Get S3 object key for a cache entry
    */
-  private getS3Key(zoneId: number, date: string): string {
-    const key = getCacheKey(zoneId, date);
+  private getS3Key(key: string): string {
+    assertValidCacheKey(key);
     return `${this.prefix}${key}.json`;
   }
 
-  async get(zoneId: number, date: string): Promise<CachedForecast | null> {
-    const key = this.getS3Key(zoneId, date);
-
+  async get<T>(key: string): Promise<CacheEntry<T> | null> {
     try {
-      const command = new GetObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-      });
-
-      const response = await this.client.send(command);
+      const response = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: this.getS3Key(key) })
+      );
 
       if (!response.Body) {
         return null;
       }
 
-      // Read the stream
-      const bodyString = await response.Body.transformToString();
-      const cached = JSON.parse(bodyString) as CachedForecast;
+      const cached = parseCacheEntry<T>(await response.Body.transformToString());
+      if (!cached) {
+        return null;
+      }
 
-      // Check if expired
       if (isExpired(cached.expiresAt)) {
-        // Delete expired entry
-        await this.delete(zoneId, date);
+        await this.delete(key);
         return null;
       }
 
       return cached;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // NoSuchKey error means cache miss
-      if (error.name === 'NoSuchKey') {
+      if (error instanceof Error && error.name === 'NoSuchKey') {
         return null;
       }
 
-      console.error(`S3 cache read error for zone ${zoneId}, date ${date}:`, error);
+      console.error(`S3 cache read error for ${key}:`, error);
       return null;
     }
   }
 
-  async set(zoneId: number, date: string, forecast: ForecastProduct | null): Promise<void> {
-    const key = this.getS3Key(zoneId, date);
-    const now = new Date();
-    const expiresAt = calculateExpiration(date, now);
-
-    const cached: CachedForecast = {
-      forecast,
-      cachedAt: now.toISOString(),
-      expiresAt: expiresAt ? expiresAt.toISOString() : null,
-      reason: getTTLReason(date, now),
-    };
-
+  async set<T>(key: string, value: T, options: CacheSetOptions): Promise<void> {
     try {
-      const command = new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: JSON.stringify(cached, null, 2),
-        ContentType: 'application/json',
-        // Optional: Add metadata for easier debugging
-        Metadata: {
-          zoneId: zoneId.toString(),
-          forecastDate: date,
-          hasForecas: forecast ? 'true' : 'false',
-        },
-      });
-
-      await this.client.send(command);
+      const entry = buildCacheEntry(value, options);
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: this.getS3Key(key),
+          Body: JSON.stringify(entry, null, 2),
+          ContentType: 'application/json',
+        })
+      );
     } catch (error) {
-      console.error(`S3 cache write error for zone ${zoneId}, date ${date}:`, error);
       // Don't throw - cache failure shouldn't break the API
+      console.error(`S3 cache write error for ${key}:`, error);
     }
   }
 
-  async delete(zoneId: number, date: string): Promise<void> {
-    const key = this.getS3Key(zoneId, date);
-
+  async delete(key: string): Promise<void> {
     try {
-      const command = new DeleteObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-      });
-
-      await this.client.send(command);
+      await this.client.send(
+        new DeleteObjectCommand({ Bucket: this.bucket, Key: this.getS3Key(key) })
+      );
     } catch (error) {
-      console.error(`S3 cache delete error for zone ${zoneId}, date ${date}:`, error);
+      console.error(`S3 cache delete error for ${key}:`, error);
     }
   }
 

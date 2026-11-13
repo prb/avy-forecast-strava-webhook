@@ -1,19 +1,39 @@
 /**
- * Mapping of NWAC zones from avalanche.org API to their GeoJSON files
+ * Mapping of avalanche forecast zones to their GeoJSON boundary files
  *
  * Zone IDs:
- * - id: Zone ID from avalanche.org API (1645-1657)
- * - zone_id: Zone ID used in NWAC URLs (1-10)
+ * - id: Internal numeric zone key, used for caching and lookups. For NWAC
+ *   this was the avalanche.org zone ID at the time the boundaries were
+ *   captured, but avalanche.org renumbers zones between seasons (e.g.
+ *   1645-1657 became 3020-3032 for 2025-26), so it MUST NOT be used to match
+ *   API products. See #51.
+ * - zone_id: The center's stable zone identifier (the slug used in forecast
+ *   URLs, e.g. '1'-'10' for NWAC, 'salt-lake' for UAC). Products are matched
+ *   on (center_id, zone_id).
  * - name: Human-readable zone name
  * - filename: GeoJSON file in data/zones/ directory
+ * - center_id: avalanche.org avalanche center identifier
  */
+
+/** avalanche.org identifiers for the avalanche centers we have boundaries for */
+export type AvalancheCenterId = 'NWAC' | 'UAC' | 'CAIC';
+
+/**
+ * Centers whose forecasts can currently be fetched and formatted end-to-end.
+ *
+ * - UAC: supported since #53. avalanche.org doesn't publish the Abajos or
+ *   Southwest zones, so those return "no forecast available".
+ * - CAIC: not supported; avalanche.org sub-zones don't map onto our
+ *   boundaries (#52)
+ */
+export const SUPPORTED_CENTERS: ReadonlySet<AvalancheCenterId> = new Set(['NWAC', 'UAC']);
 
 export interface ZoneConfig {
   id: number;
   zone_id: string;
   name: string;
   filename: string;
-  center_id: string;
+  center_id: AvalancheCenterId;
 }
 
 export const ZONE_CONFIGS: ZoneConfig[] = [

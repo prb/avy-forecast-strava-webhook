@@ -261,14 +261,14 @@ export const mockLowDangerForecast: ForecastProduct = {
 /**
  * Expected formatted forecast string for Mt Hood
  */
-export const expectedMtHoodForecastText = 'NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/avalanche-forecast/#/forecast/10/166378)';
+export const expectedMtHoodForecastText = 'NWAC Mt Hood Zone forecast: 3🟧/3🟧/2🟨 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166378)';
 
 /**
  * Expected formatted forecast for extreme danger
  */
-export const expectedExtremeDangerText = 'NWAC Mt Hood Zone forecast: 5⬛/4🟥/3🟧 (https://nwac.us/avalanche-forecast/#/forecast/10/166379)';
+export const expectedExtremeDangerText = 'NWAC Mt Hood Zone forecast: 5⬛/4🟥/3🟧 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166379)';
 
 /**
  * Expected formatted forecast for low danger
  */
-export const expectedLowDangerText = 'NWAC Mt Hood Zone forecast: 2🟨/1🟩/1🟩 (https://nwac.us/avalanche-forecast/#/forecast/10/166380)';
+export const expectedLowDangerText = 'NWAC Mt Hood Zone forecast: 2🟨/1🟩/1🟩 (https://nwac.us/forecasts/avalanche/mt-hood#/forecast/10/166380)';

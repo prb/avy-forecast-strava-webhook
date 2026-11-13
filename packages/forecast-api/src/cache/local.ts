@@ -1,18 +1,17 @@
 import { mkdir, readFile, writeFile, unlink, rm } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
-import type { ForecastProduct } from '../types/index.js';
-import type { ForecastCache, CachedForecast } from './types.js';
-import { getCacheKey } from './types.js';
-import { calculateExpiration, isExpired, getTTLReason } from './ttl.js';
+import type { CacheEntry, CacheSetOptions, CacheStore } from './types.js';
+import { assertValidCacheKey, buildCacheEntry, parseCacheEntry } from './types.js';
+import { isExpired } from './ttl.js';
 
 /**
  * Local filesystem cache implementation
  *
- * Stores cache entries as JSON files in a local directory.
+ * Stores each entry as a JSON file named after its key.
  * Good for development and testing without AWS dependencies.
  */
-export class LocalCacheStore implements ForecastCache {
+export class LocalCacheStore implements CacheStore {
   private cacheDir: string;
 
   constructor(cacheDir: string = '/tmp/nwac-cache') {
@@ -31,67 +30,55 @@ export class LocalCacheStore implements ForecastCache {
   /**
    * Get file path for a cache entry
    */
-  private getFilePath(zoneId: number, date: string): string {
-    const key = getCacheKey(zoneId, date);
+  private getFilePath(key: string): string {
+    assertValidCacheKey(key);
     return join(this.cacheDir, `${key}.json`);
   }
 
-  async get(zoneId: number, date: string): Promise<CachedForecast | null> {
-    const filePath = this.getFilePath(zoneId, date);
-
+  async get<T>(key: string): Promise<CacheEntry<T> | null> {
     try {
+      const filePath = this.getFilePath(key);
       if (!existsSync(filePath)) {
         return null;
       }
 
-      const content = await readFile(filePath, 'utf-8');
-      const cached = JSON.parse(content) as CachedForecast;
+      const cached = parseCacheEntry<T>(await readFile(filePath, 'utf-8'));
+      if (!cached) {
+        return null;
+      }
 
-      // Check if expired
       if (isExpired(cached.expiresAt)) {
-        // Delete expired entry
-        await this.delete(zoneId, date);
+        await this.delete(key);
         return null;
       }
 
       return cached;
     } catch (error) {
-      console.error(`Failed to read cache for zone ${zoneId}, date ${date}:`, error);
+      console.error(`Failed to read cache entry ${key}:`, error);
       return null;
     }
   }
 
-  async set(zoneId: number, date: string, forecast: ForecastProduct | null): Promise<void> {
-    await this.ensureCacheDir();
-
-    const filePath = this.getFilePath(zoneId, date);
-    const now = new Date();
-    const expiresAt = calculateExpiration(date, now);
-
-    const cached: CachedForecast = {
-      forecast,
-      cachedAt: now.toISOString(),
-      expiresAt: expiresAt ? expiresAt.toISOString() : null,
-      reason: getTTLReason(date, now),
-    };
-
+  async set<T>(key: string, value: T, options: CacheSetOptions): Promise<void> {
     try {
-      await writeFile(filePath, JSON.stringify(cached, null, 2), 'utf-8');
+      const filePath = this.getFilePath(key);
+      await this.ensureCacheDir();
+      const entry = buildCacheEntry(value, options);
+      await writeFile(filePath, JSON.stringify(entry, null, 2), 'utf-8');
     } catch (error) {
-      console.error(`Failed to write cache for zone ${zoneId}, date ${date}:`, error);
       // Don't throw - cache failure shouldn't break the API
+      console.error(`Failed to write cache entry ${key}:`, error);
     }
   }
 
-  async delete(zoneId: number, date: string): Promise<void> {
-    const filePath = this.getFilePath(zoneId, date);
-
+  async delete(key: string): Promise<void> {
     try {
+      const filePath = this.getFilePath(key);
       if (existsSync(filePath)) {
         await unlink(filePath);
       }
     } catch (error) {
-      console.error(`Failed to delete cache for zone ${zoneId}, date ${date}:`, error);
+      console.error(`Failed to delete cache entry ${key}:`, error);
     }
   }
 

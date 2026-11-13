@@ -1,17 +1,21 @@
-import type { ForecastProduct } from '../types/index.js';
+import type { AvalancheCenterId, ForecastProduct } from '../types/index.js';
 import { fetchProducts } from './api-base.js';
 export { fetchProducts, fetchProduct, type ProductsQuery } from './api-base.js';
 
 /**
- * Fetch NWAC forecasts for a specific date
+ * Fetch an avalanche center's forecasts for a specific date
  *
  * Note: The avalanche.org API doesn't return results when date_start === date_end,
  * so we query a 3-day range centered on the target date and filter client-side.
  *
+ * @param centerId avalanche.org center ID (e.g., "NWAC")
  * @param date Date in ISO format (YYYY-MM-DD)
  * @returns Array of forecast products for that date
  */
-export async function fetchNWACForecastsForDate(date: string): Promise<ForecastProduct[]> {
+export async function fetchForecastsForDate(
+  centerId: AvalancheCenterId,
+  date: string
+): Promise<ForecastProduct[]> {
   // Calculate date range: target date ± 1 day
   const targetDate = new Date(date + 'T00:00:00Z');
   const dayBefore = new Date(targetDate);
@@ -23,7 +27,7 @@ export async function fetchNWACForecastsForDate(date: string): Promise<ForecastP
   const dateEnd = dayAfter.toISOString().split('T')[0];
 
   const products = await fetchProducts({
-    avalanche_center_id: 'NWAC',
+    avalanche_center_id: centerId,
     date_start: dateStart,
     date_end: dateEnd,
   });
@@ -40,37 +44,89 @@ export async function fetchNWACForecastsForDate(date: string): Promise<ForecastP
 }
 
 /**
- * Fetch NWAC forecast for a specific zone and date
+ * Fetch NWAC forecasts for a specific date
  *
- * @param zoneId Zone ID from avalanche.org API (e.g., 1645-1657)
  * @param date Date in ISO format (YYYY-MM-DD)
- * @returns Forecast product if found, null otherwise
+ * @returns Array of forecast products for that date
  */
-export async function fetchNWACForecastForZone(
-  zoneId: number,
-  date: string
-): Promise<ForecastProduct | null> {
-  const forecasts = await fetchNWACForecastsForDate(date);
-
-  // Find forecast for the specified zone
-  const forecast = forecasts.find(f => {
-    return f.forecast_zone && f.forecast_zone.some(zone => zone.id === zoneId);
-  });
-
-  return forecast || null;
+export async function fetchNWACForecastsForDate(date: string): Promise<ForecastProduct[]> {
+  return fetchForecastsForDate('NWAC', date);
 }
 
 /**
- * Build permalink URL for a forecast
+ * Fetch the forecast for a specific zone and date
+ *
+ * Products are matched on the zone's stable `zone_id` slug rather than the
+ * numeric avalanche.org zone ID, which is renumbered between seasons (#51).
+ *
+ * @param centerId avalanche.org center ID (e.g., "NWAC")
+ * @param zoneId Center's stable zone identifier (e.g., '2' for NWAC Stevens Pass)
+ * @param date Date in ISO format (YYYY-MM-DD)
+ * @returns Forecast product if found, null otherwise
+ */
+export async function fetchForecastForZone(
+  centerId: AvalancheCenterId,
+  zoneId: string,
+  date: string
+): Promise<ForecastProduct | null> {
+  const forecasts = await fetchForecastsForDate(centerId, date);
+
+  const forecast = forecasts.find(f =>
+    f.forecast_zone?.some(zone => zone.zone_id === zoneId)
+  );
+
+  return forecast ?? null;
+}
+
+/**
+ * Build a link to a forecast
+ *
+ * Links point at the specific forecast, not the zone's current one, so a link
+ * on an old activity still shows the forecast for that day:
+ *
+ * - NWAC: the zone page plus the forecast's hash route, e.g.
+ *   https://nwac.us/forecasts/avalanche/snoqualmie-pass#/forecast/3/180554
+ *   (the same address NWAC redirects /forecasts/avalanche/{zone}/{date} to)
+ * - UAC: the dated forecast page, e.g.
+ *   https://utahavalanchecenter.org/forecast/salt-lake/2/16/2026
+ * - Other centers: the zone's forecast page as reported by avalanche.org,
+ *   falling back to the center's home page
  *
  * @param product Forecast product
- * @returns Permalink URL
+ * @param centerId Avalanche center that published the product (default: NWAC)
+ * @returns Forecast URL
  */
-export function buildForecastUrl(product: ForecastProduct): string {
+export function buildForecastUrl(
+  product: ForecastProduct,
+  centerId: AvalancheCenterId = 'NWAC'
+): string {
   if (!product.forecast_zone || product.forecast_zone.length === 0) {
     throw new Error('Forecast has no zone information');
   }
 
   const zone = product.forecast_zone[0];
-  return `https://nwac.us/avalanche-forecast/#/forecast/${zone.zone_id}/${product.id}`;
+  const zoneUrl = zone.url ? zone.url.split('#')[0].replace(/\/+$/, '') : '';
+
+  if (centerId === 'NWAC') {
+    const hashRoute = `#/forecast/${zone.zone_id}/${product.id}`;
+    if (/^https:\/\/nwac\.us\/forecasts\/avalanche\/[^/?#]+$/.test(zoneUrl)) {
+      return `${zoneUrl}${hashRoute}`;
+    }
+    // Missing or pre-redesign zone URL: NWAC's zone slugs are the slugified
+    // zone names (e.g. "Mt Hood" -> mt-hood)
+    const slug = zone.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return `https://nwac.us/forecasts/avalanche/${slug}${hashRoute}`;
+  }
+
+  if (centerId === 'UAC' && zoneUrl) {
+    // Same date the product was matched on (see fetchForecastsForDate)
+    const [year, month, day] = product.start_date.split('T')[0].split('-').map(Number);
+    return `${zoneUrl}/${month}/${day}/${year}`;
+  }
+
+  const url = zoneUrl || product.avalanche_center?.url;
+  if (!url) {
+    throw new Error(`Forecast ${product.id} has no ${centerId} zone or center URL`);
+  }
+  return url;
 }

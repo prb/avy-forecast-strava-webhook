@@ -18,7 +18,7 @@ describe('Forecast Query', () => {
 
       if (result.forecast) {
         expect(result.forecast.product_id).toBeGreaterThan(0);
-        expect(result.forecast.url).toMatch(/^https:\/\/nwac\.us\/avalanche-forecast\/#\/forecast\/2\/\d+$/);
+        expect(result.forecast.url).toMatch(/^https:\/\/nwac\.us\/forecasts\/avalanche\/stevens-pass#\/forecast\/2\/\d+$/);
         expect(result.forecast.danger_rating).toBeGreaterThanOrEqual(-1);
         expect(result.forecast.danger_rating).toBeLessThanOrEqual(5);
       } else {
@@ -40,7 +40,7 @@ describe('Forecast Query', () => {
       expect(result.zone.zone_id).toBe('6');
 
       if (result.forecast) {
-        expect(result.forecast.url).toMatch(/^https:\/\/nwac\.us\/avalanche-forecast\/#\/forecast\/6\/\d+$/);
+        expect(result.forecast.url).toMatch(/^https:\/\/nwac\.us\/forecasts\/avalanche\/west-slopes-south#\/forecast\/6\/\d+$/);
       }
     }, 15000);
 
@@ -54,7 +54,7 @@ describe('Forecast Query', () => {
       const result = await getForecastForCoordinate(coordinate, date);
 
       expect(result.forecast).toBeNull();
-      expect(result.error).toContain('outside all NWAC forecast zones');
+      expect(result.error).toContain('outside all supported forecast zones');
     }, 15000);
 
     it('should handle multiple different zones', async () => {

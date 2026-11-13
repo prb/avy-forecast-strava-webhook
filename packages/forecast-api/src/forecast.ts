@@ -1,8 +1,11 @@
 import { findZoneForCoordinate } from './zones/index.js';
-import { fetchNWACForecastForZone, buildForecastUrl } from './api/index.js';
-import { getCache } from './cache/index.js';
+import { SUPPORTED_CENTERS } from './zones/config.js';
+import { fetchForecastForZone, buildForecastUrl } from './api/index.js';
+import { getCache, getCachedZoneForecast, cacheZoneForecast } from './cache/index.js';
 import type {
   Coordinate,
+  ForecastResponseZone,
+  ZoneWithBoundary,
   ForecastResponse,
   ForecastProduct,
   ForecastProductResponse,
@@ -52,21 +55,31 @@ export async function getForecastForCoordinate(
       },
       forecast: null,
       product: null,
-      error: 'Coordinate is outside all NWAC forecast zones',
+      error: 'Coordinate is outside all supported forecast zones',
+    };
+  }
+
+  // Zones whose center we can't fetch/format yet get an explicit error rather
+  // than a misleading "no forecast available" (#52, #53)
+  if (!SUPPORTED_CENTERS.has(zone.center_id)) {
+    return {
+      zone: toResponseZone(zone),
+      forecast: null,
+      product: null,
+      error: `Forecasts for ${zone.center_id} zones are not yet supported`,
     };
   }
 
   // Step 2: Try cache first (if enabled)
   if (useCache) {
     try {
-      const cache = getCache();
-      const cached = await cache.get(zone.id, date);
+      const cached = await getCachedZoneForecast(getCache(), zone.id, date);
 
       if (cached) {
         console.log(`Cache HIT for zone ${zone.id}, date ${date} (${cached.reason})`);
         return includeProduct
-          ? buildForecastProductResponse(zone, cached.forecast)
-          : buildForecastResponse(zone, cached.forecast);
+          ? buildForecastProductResponse(toResponseZone(zone), cached.value)
+          : buildForecastResponse(toResponseZone(zone), cached.value);
       }
 
       console.log(`Cache MISS for zone ${zone.id}, date ${date}`);
@@ -78,13 +91,12 @@ export async function getForecastForCoordinate(
 
   // Step 3: Fetch from API (cache miss or cache disabled)
   try {
-    const product = await fetchNWACForecastForZone(zone.id, date);
+    const product = await fetchForecastForZone(zone.center_id, zone.zone_id, date);
 
     // Step 4: Store in cache (both positive and negative results)
     if (useCache) {
       try {
-        const cache = getCache();
-        await cache.set(zone.id, date, product);
+        await cacheZoneForecast(getCache(), zone.id, date, product);
         console.log(`Cached forecast for zone ${zone.id}, date ${date}: ${product ? 'found' : 'not found'}`);
       } catch (error) {
         // Cache write errors shouldn't break the API - just log
@@ -93,15 +105,11 @@ export async function getForecastForCoordinate(
     }
 
     return includeProduct
-      ? buildForecastProductResponse(zone, product)
-      : buildForecastResponse(zone, product);
+      ? buildForecastProductResponse(toResponseZone(zone), product)
+      : buildForecastResponse(toResponseZone(zone), product);
   } catch (error) {
     return {
-      zone: {
-        id: zone.id,
-        zone_id: zone.zone_id,
-        name: zone.name,
-      },
+      zone: toResponseZone(zone),
       forecast: null,
       product: null,
       error: error instanceof Error ? error.message : 'Unknown error fetching forecast',
@@ -110,32 +118,36 @@ export async function getForecastForCoordinate(
 }
 
 /**
+ * Summarize a zone for API responses (drops the boundary geometry)
+ */
+function toResponseZone(zone: ZoneWithBoundary): ForecastResponseZone {
+  return {
+    id: zone.id,
+    zone_id: zone.zone_id,
+    name: zone.name,
+    center_id: zone.center_id,
+  };
+}
+
+/**
  * Build forecast response from zone and product
  */
 function buildForecastResponse(
-  zone: { id: number; zone_id: string; name: string },
+  zone: ForecastResponseZone,
   product: ForecastProduct | null
 ): ForecastResponse {
   if (!product) {
     return {
-      zone: {
-        id: zone.id,
-        zone_id: zone.zone_id,
-        name: zone.name,
-      },
+      zone,
       forecast: null,
       error: `No forecast available for ${zone.name}`,
     };
   }
 
-  const url = buildForecastUrl(product);
+  const url = buildForecastUrl(product, zone.center_id);
 
   return {
-    zone: {
-      id: zone.id,
-      zone_id: zone.zone_id,
-      name: zone.name,
-    },
+    zone,
     forecast: {
       product_id: product.id,
       date: product.start_date,
@@ -151,7 +163,7 @@ function buildForecastResponse(
  * Build forecast product response from zone and product
  */
 function buildForecastProductResponse(
-  zone: { id: number; zone_id: string; name: string },
+  zone: ForecastResponseZone,
   product: ForecastProduct | null
 ): ForecastProductResponse {
   if (!product) {
